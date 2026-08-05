@@ -8,6 +8,7 @@ import { i18n } from './i18n'
 
 import './assets/fonts.css'
 import './assets/index.css'
+import './assets/nexus-theme.css'
 
 const app = createApp(App)
 
