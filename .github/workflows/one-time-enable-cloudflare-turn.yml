@@ -1,0 +1,45 @@
+name: One-time enable Cloudflare TURN
+
+on:
+  push:
+    branches:
+      - fix/cloudflare-turn-wireup-20260806
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nexus-production
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+      - name: Wire dynamic TURN resolver
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('internal/calling/webrtc.go')
+          s = p.read_text()
+          old = '''\tnow := time.Now()\n\ticeServers := make([]webrtc.ICEServer, 0, len(m.config.ICEServers))\n\tfor _, s := range m.config.ICEServers {\n\t\tice := webrtc.ICEServer{URLs: s.URLs}\n\t\tif username, credential := s.ResolveCredentials(now); username != "" {\n\t\t\tice.Username = username\n\t\t\tice.Credential = credential\n\t\t\tice.CredentialType = webrtc.ICECredentialTypePassword\n\t\t}\n\t\ticeServers = append(iceServers, ice)\n\t}\n'''
+          new = '''\tnow := time.Now()\n\ticeServers, err := m.resolveICEServers(now)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf("resolve ICE servers: %w", err)\n\t}\n\tif m.config.RelayOnly && len(iceServers) == 0 {\n\t\treturn nil, fmt.Errorf("relay_only is enabled but no TURN server is configured")\n\t}\n'''
+          if old not in s:
+              raise SystemExit('target ICE server block not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          gofmt -w internal/calling/webrtc.go internal/calling/cloudflare_turn.go
+          git diff --check
+          go test ./internal/calling ./internal/config
+          go build ./...
+      - name: Push production once
+        run: |
+          git config user.name "Nexus One Fix Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add internal/calling/webrtc.go internal/calling/cloudflare_turn.go
+          git commit -m "fix(calling): use Cloudflare TURN credentials for reliable media"
+          git push origin HEAD:nexus-production
