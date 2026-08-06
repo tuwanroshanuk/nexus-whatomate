@@ -59,6 +59,9 @@ func sendDTMFDigit(session *CallSession, digit byte, log logf.Logger) {
 // The E-bit (end bit) is set on the last packet of a DTMF event.
 // We only emit the digit when we see the end bit to avoid duplicates.
 func (m *Manager) handleDTMFTrack(session *CallSession, track *webrtc.TrackRemote) {
+	// A panic here would otherwise crash the whole process and take every
+	// other active/future call down with it — see safety.go.
+	defer m.recoverAndLog("handleDTMFTrack", session.ID)
 	buf := make([]byte, 1500)
 	var lastEvent byte = 0xFF // impossible event ID as sentinel
 	var lastEndBit bool

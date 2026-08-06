@@ -63,7 +63,7 @@ WORKDIR /app
 
 # Install runtime dependencies (TTS: espeak-ng, opus-tools; transcoding: ffmpeg)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata espeak-ng opus-tools ffmpeg \
+    ca-certificates tzdata espeak-ng opus-tools ffmpeg wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
@@ -87,6 +87,13 @@ RUN mkdir -p /app/uploads /app/audio
 
 # Expose port
 EXPOSE 8080
+
+# Belt-and-braces: even if the orchestrator's own compose/service healthcheck
+# is ignored or overridden, the image itself reports unhealthy when the
+# server stops responding (deadlock, exhausted connection pool, wedged
+# goroutine) so IVR/calling doesn't stay silently down.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/health || exit 1
 
 # Match the GoReleaser image's launch convention so the same orchestrator
 # args work against both tags: the binary is the ENTRYPOINT and CMD holds

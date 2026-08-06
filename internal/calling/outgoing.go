@@ -245,6 +245,9 @@ func (m *Manager) InitiateOutgoingCall(
 // waitForWASDPAnswer waits for the SDP answer from the webhook and sets it
 // on the WhatsApp PeerConnection.
 func (m *Manager) waitForWASDPAnswer(session *CallSession, waPC *webrtc.PeerConnection) {
+	// A panic here would otherwise crash the whole process and take every
+	// other active/future call down with it — see safety.go.
+	defer m.recoverAndLog("waitForWASDPAnswer", session.ID)
 	select {
 	case sdpAnswer := <-session.SDPAnswerReady:
 		if err := waPC.SetRemoteDescription(webrtc.SessionDescription{

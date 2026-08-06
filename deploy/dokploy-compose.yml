@@ -48,7 +48,7 @@ services:
 
       WHATOMATE_CALLING__PUBLIC_IP: 62.171.189.222
       WHATOMATE_CALLING__UDP_PORT_MIN: "50000"
-      WHATOMATE_CALLING__UDP_PORT_MAX: "50100"
+      WHATOMATE_CALLING__UDP_PORT_MAX: "50999"
       # Forced to true by default: ICE was intermittently selecting the
       # host-candidate pair (direct to the Docker port-mapped bridge) whose
       # DTLS/SRTP handshake proved unreliable — either stalling indefinitely
@@ -71,9 +71,20 @@ services:
     expose:
       - "8080"
     ports:
-      - "50000-50100:50000-50100/udp"
+      - "50000-50999:50000-50999/udp"
     networks:
       - whatomate
+    # `restart: unless-stopped` only fires on process exit. If the server
+    # hangs (deadlock, exhausted DB pool, a goroutine stuck without
+    # panicking) without exiting, nothing restarts it and IVR/calling stays
+    # down until someone notices. This healthcheck + the app's own /health
+    # endpoint lets Dokploy/Docker detect that and recycle the container.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   postgres:
     image: postgres:17-alpine

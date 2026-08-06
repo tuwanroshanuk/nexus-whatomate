@@ -90,7 +90,7 @@ type CallingConfig struct {
 	PerAgentTimeoutSecs int               `koanf:"per_agent_timeout_secs"`
 	RingbackFile        string            `koanf:"ringback_file"`
 	UDPPortMin          uint16            `koanf:"udp_port_min"` // WebRTC UDP port range start (default: 10000)
-	UDPPortMax          uint16            `koanf:"udp_port_max"` // WebRTC UDP port range end (default: 10100)
+	UDPPortMax          uint16            `koanf:"udp_port_max"` // WebRTC UDP port range end (default: 10999)
 	PublicIP            string            `koanf:"public_ip"`    // Public IP for NAT mapping (required on AWS/cloud)
 	RelayOnly           bool              `koanf:"relay_only"`   // Force all media through TURN relay (no direct UDP)
 	ICEServers          []ICEServerConfig `koanf:"ice_servers"`

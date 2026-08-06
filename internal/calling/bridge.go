@@ -1,11 +1,23 @@
 package calling
 
 import (
+	"log"
+	"runtime/debug"
 	"sync"
 
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 )
+
+// recoverBridge stops one bad packet/track from crashing the whole process.
+// AudioBridge has no Manager/logger reference, so this falls back to the
+// standard logger — still far better than an unrecovered panic here taking
+// down every other active call on the server.
+func recoverBridge(where string) {
+	if r := recover(); r != nil {
+		log.Printf("[calling] recovered from panic in %s: %v\n%s", where, r, debug.Stack())
+	}
+}
 
 // AudioBridge forwards RTP packets bidirectionally between two WebRTC tracks.
 // It bridges the caller's remote track to the agent's local track, and vice versa.
@@ -86,6 +98,7 @@ func (b *AudioBridge) Start(
 		b.wg.Add(1)
 		go func() {
 			defer b.wg.Done()
+			defer recoverBridge("bridge.forward caller->agent")
 			b.forward(callerRemote, agentLocal, b.callerRec, false)
 		}()
 	} else {
@@ -96,6 +109,7 @@ func (b *AudioBridge) Start(
 		b.wg.Add(1)
 		go func() {
 			defer b.wg.Done()
+			defer recoverBridge("bridge.forward caller-slot")
 			select {
 			case <-b.stop:
 			case leg := <-b.callerSlot:
@@ -109,6 +123,7 @@ func (b *AudioBridge) Start(
 		b.wg.Add(1)
 		go func() {
 			defer b.wg.Done()
+			defer recoverBridge("bridge.forward agent->caller")
 			b.forward(agentRemote, callerLocal, b.agentRec, true)
 		}()
 	}

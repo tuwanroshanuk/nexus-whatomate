@@ -230,6 +230,16 @@ func runServer(args []string) {
 	app.S3Client = s3Client
 	lo.Info("Call manager initialized")
 
+	// Background watchdog: force-cleans any call session that gets stuck
+	// (negotiation that never finished, a session whose context was
+	// canceled but never actually cleaned up, a peer connection that died
+	// without an event ever reaching us). Without this, a single stuck
+	// session sits in memory and can make the very next redial from that
+	// caller look like a failure. Stopped via watchdogCancel on shutdown.
+	watchdogCtx, watchdogCancel := context.WithCancel(context.Background())
+	go app.CallManager.StartWatchdog(watchdogCtx)
+	defer watchdogCancel()
+
 	// Initialize TTS if configured (requires piper binary + model)
 	if cfg.TTS.PiperBinary != "" && cfg.TTS.PiperModel != "" {
 		app.TTS = &tts.PiperTTS{

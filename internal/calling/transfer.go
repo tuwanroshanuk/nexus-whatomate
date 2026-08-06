@@ -17,6 +17,9 @@ import (
 
 // initiateTransfer starts the transfer flow: puts caller on hold, notifies agents via WebSocket.
 func (m *Manager) initiateTransfer(session *CallSession, waAccount string, teamTarget string, ivrPath []map[string]string) {
+	// A panic here would otherwise crash the whole process and take every
+	// other active/future call down with it — see safety.go.
+	defer m.recoverAndLog("initiateTransfer", session.ID)
 	// Load org-level calling overrides once
 	orgSettings := m.getOrgCallingSettings(session.OrganizationID)
 
@@ -574,6 +577,9 @@ func (m *Manager) lateCallerTrack(session *CallSession) *webrtc.TrackRemote {
 
 // completeTransferConnection waits for the agent's audio track and starts the audio bridge.
 func (m *Manager) completeTransferConnection(session *CallSession, transferID, agentID uuid.UUID, agentTrackReady chan *webrtc.TrackRemote) {
+	// A panic here would otherwise crash the whole process and take every
+	// other active/future call down with it — see safety.go.
+	defer m.recoverAndLog("completeTransferConnection", session.ID)
 	// Wait for agent's mic track (up to 10 seconds)
 	var agentRemoteTrack *webrtc.TrackRemote
 	select {
@@ -824,6 +830,9 @@ func (m *Manager) EndTransfer(transferID uuid.UUID) {
 // PerAgentTimeoutSecs for each. If all agents are exhausted, it falls back to
 // broadcasting to the remaining team members.
 func (m *Manager) runTransferRotation(session *CallSession, transfer models.CallTransfer, orgSettings orgCallingSettings) {
+	// A panic here would otherwise crash the whole process and take every
+	// other active/future call down with it — see safety.go.
+	defer m.recoverAndLog("runTransferRotation", session.ID)
 	teamID := *transfer.TeamID
 	orgID := transfer.OrganizationID
 	triedAgents := []uuid.UUID{}
@@ -1012,6 +1021,9 @@ func (m *Manager) runTransferRotation(session *CallSession, transfer models.Call
 // waitForTransferTimeout marks the transfer as no_answer if nobody accepts in time.
 // Used for non-team transfers (org-wide broadcast, direct agent transfers).
 func (m *Manager) waitForTransferTimeout(ctx context.Context, session *CallSession, transferID uuid.UUID) {
+	// A panic here would otherwise crash the whole process and take every
+	// other active/future call down with it — see safety.go.
+	defer m.recoverAndLog("waitForTransferTimeout", session.ID)
 	<-ctx.Done()
 
 	// If the context was cancelled (not timed out), the transfer was accepted or ended

@@ -194,7 +194,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		m.EndCall(session.ID)
 		return
 	}
-	if abortIfPeerTerminal("after_pre_accept") {
+	if abortIfPeerTerminal("after_pre_accept", true) {
 		return
 	}
 
@@ -211,7 +211,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		m.EndCall(session.ID)
 		return
 	}
-	if abortIfPeerTerminal("after_accept") {
+	if abortIfPeerTerminal("after_accept", true) {
 		return
 	}
 
@@ -279,7 +279,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		}
 	case <-stabilize.C:
 	}
-	if abortIfPeerTerminal("before_ivr") {
+	if abortIfPeerTerminal("before_ivr", true) {
 		return
 	}
 
@@ -384,7 +384,14 @@ func (m *Manager) createPeerConnection() (*webrtc.PeerConnection, error) {
 		portMin = 10000
 	}
 	if portMax == 0 {
-		portMax = 10100
+		// Widened from a 100-port default: each concurrent call holds one
+		// local ephemeral UDP port for the life of the call (even in
+		// relay-only/TURN mode, for the local ICE agent<->TURN allocation),
+		// and slow OS-level port release under load can make a too-narrow
+		// range look like "the next call fails" when it's really port
+		// exhaustion. 1000 ports gives real headroom; override via
+		// WHATOMATE_CALLING__UDP_PORT_MAX if the host needs a tighter range.
+		portMax = 10999
 	}
 	if err := settingEngine.SetEphemeralUDPPortRange(portMin, portMax); err != nil {
 		return nil, fmt.Errorf("failed to set UDP port range: %w", err)
@@ -459,6 +466,9 @@ func (m *Manager) createPeerConnection() (*webrtc.PeerConnection, error) {
 // consumeAudioTrack reads and discards RTP packets to keep the stream active.
 // It exits when the bridge takes over (BridgeStarted channel is closed) or on error.
 func (m *Manager) consumeAudioTrack(session *CallSession, track *webrtc.TrackRemote) {
+	// A panic here would otherwise crash the whole process and take every
+	// other active/future call down with it — see safety.go.
+	defer m.recoverAndLog("consumeAudioTrack", session.ID)
 	buf := make([]byte, 1500)
 	for {
 		select {
@@ -481,6 +491,9 @@ func (m *Manager) consumeAudioTrack(session *CallSession, track *webrtc.TrackRem
 // In pion v4, a new OnTrack may fire for telephone-event, but we also
 // handle the case where DTMF arrives on the same track.
 func (m *Manager) consumeAudioWithDTMF(session *CallSession, track *webrtc.TrackRemote) {
+	// A panic here would otherwise crash the whole process and take every
+	// other active/future call down with it — see safety.go.
+	defer m.recoverAndLog("consumeAudioWithDTMF", session.ID)
 	audioPT := track.PayloadType()
 	var lastDTMFEvent byte = 0xFF
 	var lastEndBit bool

@@ -15,6 +15,9 @@ import (
 
 // runIVRFlow parses the IVR flow graph and executes the node loop.
 func (m *Manager) runIVRFlow(session *CallSession, waAccount *whatsapp.Account) {
+	// A panic here would otherwise crash the whole process and take every
+	// other active/future call down with it — see safety.go.
+	defer m.recoverAndLog("runIVRFlow", session.ID)
 	if session.IVRFlow == nil || session.IVRFlow.Menu == nil {
 		m.log.Info("No IVR flow or menu configured", "call_id", session.ID)
 		return
