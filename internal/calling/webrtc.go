@@ -88,26 +88,39 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		go m.consumeAudioWithDTMF(session, track)
 	})
 
-	// Channel to signal when the WebRTC connection is established
-	connected := make(chan struct{})
+	// Buffered state events let negotiation observe terminal transitions without
+	// blocking Pion's callback goroutine. A connection that briefly reaches
+	// connected and then closes must never continue to WhatsApp accept/IVR.
+	stateEvents := make(chan webrtc.PeerConnectionState, 8)
 
-	// Handle connection state changes
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		m.log.Info("Peer connection state changed",
 			"call_id", session.ID,
 			"state", state.String(),
 		)
-		switch state {
-		case webrtc.PeerConnectionStateConnected:
-			select {
-			case <-connected:
-			default:
-				close(connected)
-			}
-		case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateDisconnected:
+		select {
+		case stateEvents <- state:
+		default:
+		}
+		if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
 			m.EndCall(session.ID)
 		}
 	})
+
+	abortIfPeerTerminal := func(stage string) bool {
+		state := pc.ConnectionState()
+		if state != webrtc.PeerConnectionStateFailed && state != webrtc.PeerConnectionStateClosed {
+			return false
+		}
+		m.log.Error("WebRTC peer became terminal during negotiation",
+			"call_id", session.ID,
+			"stage", stage,
+			"state", state.String(),
+		)
+		m.rejectCall(ctx, waAccount, session.ID)
+		m.EndCall(session.ID)
+		return true
+	}
 
 	// Step 1: Set the consumer's SDP offer as remote description
 	if err := pc.SetRemoteDescription(webrtc.SessionDescription{
@@ -143,16 +156,28 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 
 	sdpAnswer := localDesc.SDP
 
+	if abortIfPeerTerminal("before_pre_accept") {
+		return
+	}
+
 	// Step 3: Pre-accept with our SDP answer
 	if err := m.whatsapp.PreAcceptCall(ctx, waAccount, session.ID, sdpAnswer); err != nil {
 		m.log.Error("Failed to pre-accept call", "error", err, "call_id", session.ID)
 		m.rejectCall(ctx, waAccount, session.ID)
+		m.EndCall(session.ID)
+		return
+	}
+	if abortIfPeerTerminal("after_pre_accept") {
 		return
 	}
 
 	// Step 4: Accept with the same SDP answer
 	if err := m.whatsapp.AcceptCall(ctx, waAccount, session.ID, sdpAnswer); err != nil {
 		m.log.Error("Failed to accept call via API", "error", err, "call_id", session.ID)
+		m.EndCall(session.ID)
+		return
+	}
+	if abortIfPeerTerminal("after_accept") {
 		return
 	}
 
@@ -167,26 +192,48 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	// to complete before audio can flow.
 	mediaTimer := time.NewTimer(15 * time.Second)
 	defer mediaTimer.Stop()
-	select {
-	case <-ctx.Done():
-		m.log.Info("WebRTC negotiation cancelled for stale/ended call", "call_id", session.ID)
-		return
-	case <-connected:
-		m.log.Info("WebRTC media connected", "call_id", session.ID)
-	case <-mediaTimer.C:
-		m.log.Error("WebRTC media connection timed out", "call_id", session.ID)
-		m.terminateCall(session, waAccount)
-		m.EndCall(session.ID)
-		return
+	mediaConnected := false
+	for !mediaConnected {
+		select {
+		case <-ctx.Done():
+			m.log.Info("WebRTC negotiation cancelled for stale/ended call", "call_id", session.ID)
+			return
+		case state := <-stateEvents:
+			switch state {
+			case webrtc.PeerConnectionStateConnected:
+				mediaConnected = true
+			case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
+				m.log.Error("WebRTC peer closed before media became usable", "call_id", session.ID, "state", state.String())
+				m.terminateCall(session, waAccount)
+				m.EndCall(session.ID)
+				return
+			}
+		case <-mediaTimer.C:
+			m.log.Error("WebRTC media connection timed out", "call_id", session.ID)
+			m.terminateCall(session, waAccount)
+			m.EndCall(session.ID)
+			return
+		}
 	}
+	m.log.Info("WebRTC media connected", "call_id", session.ID)
 
-	// Brief delay to let the media path stabilize before sending audio.
-	stabilize := time.NewTimer(500 * time.Millisecond)
+	// Brief delay to ensure the selected ICE path remains stable before audio.
+	stabilize := time.NewTimer(750 * time.Millisecond)
 	defer stabilize.Stop()
 	select {
 	case <-ctx.Done():
 		return
+	case state := <-stateEvents:
+		if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
+			m.log.Error("WebRTC peer closed during media stabilization", "call_id", session.ID, "state", state.String())
+			m.terminateCall(session, waAccount)
+			m.EndCall(session.ID)
+			return
+		}
 	case <-stabilize.C:
+	}
+	if abortIfPeerTerminal("before_ivr") {
+		return
 	}
 
 	// Sticky-routed call: skip IVR entirely and ring the originating agent
