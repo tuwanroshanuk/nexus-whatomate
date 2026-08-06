@@ -20,6 +20,11 @@ import (
 //  5. Business sends accept with the same session object
 //  6. WebRTC media flows
 func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsAppAccount, sdpOffer string) {
+	// A panic anywhere below (a bad SDP, an unexpected nil, a pion internal
+	// edge case) must end this one call, not the whole process — every other
+	// active call and every future incoming call has to keep working.
+	defer m.recoverAndLog("negotiateWebRTC", session.ID)
+
 	baseCtx := session.Context
 	if baseCtx == nil {
 		baseCtx = context.Background()
@@ -33,7 +38,8 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	pc, err := m.createPeerConnection()
 	if err != nil {
 		m.log.Error("Failed to create peer connection", "error", err, "call_id", session.ID)
-		m.rejectCall(ctx, waAccount, session.ID)
+		m.signalReject(session, waAccount)
+		m.EndCall(session.ID)
 		return
 	}
 
@@ -45,7 +51,8 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	audioTrack, err := createOpusTrack(pc, "ivr-audio")
 	if err != nil {
 		m.log.Error("Failed to create audio track", "error", err)
-		m.rejectCall(ctx, waAccount, session.ID)
+		m.signalReject(session, waAccount)
+		m.EndCall(session.ID)
 		return
 	}
 
@@ -107,7 +114,19 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		}
 	})
 
-	abortIfPeerTerminal := func(stage string) bool {
+	// abortIfPeerTerminal checks whether the peer connection has already
+	// died mid-negotiation and, if so, ends the call and reports true so the
+	// caller can bail out immediately.
+	//
+	// Per the WhatsApp Business Calling API, "reject" is only a valid action
+	// before the call has been pre-accepted; once pre_accept has been sent,
+	// Meta considers the call in the process of being answered and expects
+	// "terminate" instead. Sending "reject" after pre_accept/accept is a
+	// protocol-level mismatch and — worse — because rejectCall's error path
+	// only logs, it means Meta may never learn the call actually ended.
+	// accepted must be true for every call site from "after_pre_accept"
+	// onward.
+	abortIfPeerTerminal := func(stage string, accepted bool) bool {
 		state := pc.ConnectionState()
 		if state != webrtc.PeerConnectionStateFailed && state != webrtc.PeerConnectionStateClosed {
 			return false
@@ -117,7 +136,11 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 			"stage", stage,
 			"state", state.String(),
 		)
-		m.rejectCall(ctx, waAccount, session.ID)
+		if accepted {
+			m.signalTerminate(session, waAccount)
+		} else {
+			m.signalReject(session, waAccount)
+		}
 		m.EndCall(session.ID)
 		return true
 	}
@@ -128,7 +151,8 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		SDP:  sdpOffer,
 	}); err != nil {
 		m.log.Error("Failed to set remote description (consumer offer)", "error", err, "call_id", session.ID)
-		m.rejectCall(ctx, waAccount, session.ID)
+		m.signalReject(session, waAccount)
+		m.EndCall(session.ID)
 		return
 	}
 
@@ -136,13 +160,15 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
 		m.log.Error("Failed to create SDP answer", "error", err, "call_id", session.ID)
-		m.rejectCall(ctx, waAccount, session.ID)
+		m.signalReject(session, waAccount)
+		m.EndCall(session.ID)
 		return
 	}
 
 	if err := pc.SetLocalDescription(answer); err != nil {
 		m.log.Error("Failed to set local description (answer)", "error", err, "call_id", session.ID)
-		m.rejectCall(ctx, waAccount, session.ID)
+		m.signalReject(session, waAccount)
+		m.EndCall(session.ID)
 		return
 	}
 
@@ -150,20 +176,21 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	localDesc, err := waitForICEGathering(pc, 15*time.Second)
 	if err != nil {
 		m.log.Error("ICE gathering failed", "error", err, "call_id", session.ID)
-		m.rejectCall(ctx, waAccount, session.ID)
+		m.signalReject(session, waAccount)
+		m.EndCall(session.ID)
 		return
 	}
 
 	sdpAnswer := localDesc.SDP
 
-	if abortIfPeerTerminal("before_pre_accept") {
+	if abortIfPeerTerminal("before_pre_accept", false) {
 		return
 	}
 
 	// Step 3: Pre-accept with our SDP answer
 	if err := m.whatsapp.PreAcceptCall(ctx, waAccount, session.ID, sdpAnswer); err != nil {
 		m.log.Error("Failed to pre-accept call", "error", err, "call_id", session.ID)
-		m.rejectCall(ctx, waAccount, session.ID)
+		m.signalReject(session, waAccount)
 		m.EndCall(session.ID)
 		return
 	}
