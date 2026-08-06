@@ -240,15 +240,12 @@ func createOpusTrack(pc *webrtc.PeerConnection, streamID string) (*webrtc.TrackL
 // createPeerConnection creates a new WebRTC peer connection with Opus codec support
 func (m *Manager) createPeerConnection() (*webrtc.PeerConnection, error) {
 	now := time.Now()
-	iceServers := make([]webrtc.ICEServer, 0, len(m.config.ICEServers))
-	for _, s := range m.config.ICEServers {
-		ice := webrtc.ICEServer{URLs: s.URLs}
-		if username, credential := s.ResolveCredentials(now); username != "" {
-			ice.Username = username
-			ice.Credential = credential
-			ice.CredentialType = webrtc.ICECredentialTypePassword
-		}
-		iceServers = append(iceServers, ice)
+	iceServers, err := m.resolveICEServers(now)
+	if err != nil {
+		return nil, fmt.Errorf("resolve ICE servers: %w", err)
+	}
+	if m.config.RelayOnly && len(iceServers) == 0 {
+		return nil, fmt.Errorf("relay_only is enabled but no TURN server is configured")
 	}
 
 	config := webrtc.Configuration{
