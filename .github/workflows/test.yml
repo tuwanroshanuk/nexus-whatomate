@@ -1,0 +1,119 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: whatomate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+
+      - name: Run tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/whatomate_test?sslmode=disable
+          TEST_REDIS_URL: redis://localhost:6379
+        run: |
+          # gotestsum gives live "Running N/M tests" output, names failed
+          # tests prominently at the end, and re-prints failure logs in a
+          # final summary so we don't have to scroll.
+          # -p 1 runs packages sequentially to avoid database conflicts
+          # (all packages share the test DB).
+          # --format testname streams a PASS/FAIL line per test as it
+          # completes, so a hanging test is easy to spot — the last
+          # printed test is the one before the hang.
+          # -timeout 10m caps the whole run so a hung test fails the job
+          # in a reasonable window instead of waiting for go's default.
+          gotestsum \
+            --format testname \
+            --hide-summary=skipped \
+            -- -race -p 1 -timeout 10m -coverprofile=coverage.out $(go list ./... | grep -v /test/)
+
+      - name: Display coverage
+        run: go tool cover -func=coverage.out | grep "total:"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.out
+          retention-days: 7
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.4
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Build
+        run: go build -v ./...

@@ -1,0 +1,133 @@
+services:
+  whatomate:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ}
+
+      WHATOMATE_APP__NAME: ${WHATOMATE_APP__NAME}
+      WHATOMATE_APP__ENVIRONMENT: production
+      WHATOMATE_APP__DEBUG: "false"
+      WHATOMATE_APP__ENCRYPTION_KEY: ${WHATOMATE_APP__ENCRYPTION_KEY}
+
+      WHATOMATE_SERVER__ALLOWED_ORIGINS: https://one.nexuscloud.uk
+
+      WHATOMATE_DATABASE__HOST: postgres
+      WHATOMATE_DATABASE__PORT: "5432"
+      WHATOMATE_DATABASE__USER: ${POSTGRES_USER}
+      WHATOMATE_DATABASE__PASSWORD: ${POSTGRES_PASSWORD}
+      WHATOMATE_DATABASE__NAME: ${POSTGRES_DB}
+      WHATOMATE_DATABASE__SSL_MODE: disable
+
+      WHATOMATE_REDIS__HOST: redis
+      WHATOMATE_REDIS__PORT: "6379"
+      WHATOMATE_REDIS__PASSWORD: ${REDIS_PASSWORD}
+      WHATOMATE_REDIS__DB: "0"
+      WHATOMATE_REDIS__TLS: "false"
+
+      WHATOMATE_JWT__SECRET: ${WHATOMATE_JWT__SECRET}
+
+      WHATOMATE_WHATSAPP__WEBHOOK_VERIFY_TOKEN: ${WHATOMATE_WHATSAPP__WEBHOOK_VERIFY_TOKEN}
+      WHATOMATE_WHATSAPP__API_VERSION: ${WHATOMATE_WHATSAPP__API_VERSION}
+      WHATOMATE_WHATSAPP__APP_ID: ${WHATOMATE_WHATSAPP__APP_ID}
+      WHATOMATE_WHATSAPP__APP_SECRET: ${WHATOMATE_WHATSAPP__APP_SECRET}
+      WHATOMATE_WHATSAPP__CONFIG_ID: ${WHATOMATE_WHATSAPP__CONFIG_ID}
+
+      WHATOMATE_COOKIE__DOMAIN: one.nexuscloud.uk
+      WHATOMATE_COOKIE__SECURE: "true"
+
+      WHATOMATE_RATE_LIMIT__ENABLED: "true"
+      WHATOMATE_RATE_LIMIT__TRUST_PROXY: "true"
+
+      WHATOMATE_CALLING__PUBLIC_IP: 62.171.189.222
+      WHATOMATE_CALLING__UDP_PORT_MIN: "50000"
+      WHATOMATE_CALLING__UDP_PORT_MAX: "50999"
+      # Forced to true by default: ICE was intermittently selecting the
+      # host-candidate pair (direct to the Docker port-mapped bridge) whose
+      # DTLS/SRTP handshake proved unreliable — either stalling indefinitely
+      # (15s media timeout) or collapsing seconds after appearing to connect.
+      # Cloudflare TURN relay candidates are already provisioned and reliable;
+      # this forces every call through them. Override via env if needed.
+      WHATOMATE_CALLING__RELAY_ONLY: ${WHATOMATE_CALLING__RELAY_ONLY:-true}
+      WHATOMATE_CALLING__CLOUDFLARE_TURN_KEY_ID: ${WHATOMATE_CALLING__CLOUDFLARE_TURN_KEY_ID}
+      WHATOMATE_CALLING__CLOUDFLARE_TURN_API_TOKEN: ${WHATOMATE_CALLING__CLOUDFLARE_TURN_API_TOKEN}
+      WHATOMATE_CALLING__CLOUDFLARE_TURN_TTL: ${WHATOMATE_CALLING__CLOUDFLARE_TURN_TTL:-3600}
+
+      WHATOMATE_DEFAULT_ADMIN__EMAIL: ${WHATOMATE_DEFAULT_ADMIN__EMAIL}
+      WHATOMATE_DEFAULT_ADMIN__PASSWORD: ${WHATOMATE_DEFAULT_ADMIN__PASSWORD}
+      WHATOMATE_DEFAULT_ADMIN__FULL_NAME: ${WHATOMATE_DEFAULT_ADMIN__FULL_NAME}
+
+    volumes:
+      - whatomate_uploads:/app/uploads
+      - whatomate_audio:/app/audio
+      - ./config.production.toml:/app/config.toml:ro
+    expose:
+      - "8080"
+    ports:
+      - "50000-50999:50000-50999/udp"
+    networks:
+      - whatomate
+    # `restart: unless-stopped` only fires on process exit. If the server
+    # hangs (deadlock, exhausted DB pool, a goroutine stuck without
+    # panicking) without exiting, nothing restarts it and IVR/calling stays
+    # down until someone notices. This healthcheck + the app's own /health
+    # endpoint lets Dokploy/Docker detect that and recycle the container.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - whatomate_postgres:/var/lib/postgresql/data
+    networks:
+      - whatomate
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - whatomate_redis:/data
+    networks:
+      - whatomate
+
+networks:
+  whatomate:
+    driver: bridge
+
+volumes:
+  whatomate_uploads:
+  whatomate_audio:
+  whatomate_postgres:
+  whatomate_redis:

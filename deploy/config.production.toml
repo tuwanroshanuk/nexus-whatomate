@@ -1,0 +1,91 @@
+[app]
+name = "Nexus WhatsApp"
+environment = "production"
+debug = false
+encryption_key = "overridden-by-dokploy"
+
+[server]
+host = "0.0.0.0"
+port = 8080
+read_timeout = 60
+write_timeout = 60
+base_path = ""
+allowed_origins = "https://one.nexuscloud.uk"
+
+[database]
+host = "postgres"
+port = 5432
+user = "whatomate"
+password = "overridden-by-dokploy"
+name = "whatomate"
+ssl_mode = "disable"
+max_open_conns = 50
+max_idle_conns = 10
+conn_max_lifetime = 300
+
+[redis]
+host = "redis"
+port = 6379
+username = ""
+password = "overridden-by-dokploy"
+db = 0
+tls = false
+
+[jwt]
+secret = "overridden-by-dokploy"
+access_expiry_mins = 15
+refresh_expiry_days = 7
+
+[storage]
+type = "local"
+local_path = "/app/uploads"
+s3_bucket = ""
+s3_region = ""
+s3_key = ""
+s3_secret = ""
+
+[whatsapp]
+webhook_verify_token = "overridden-by-dokploy"
+api_version = "v24.0"
+base_url = "https://graph.facebook.com"
+app_id = ""
+app_secret = ""
+config_id = ""
+
+[cookie]
+domain = "one.nexuscloud.uk"
+secure = true
+
+[rate_limit]
+enabled = true
+login_max_attempts = 10
+register_max_attempts = 5
+refresh_max_attempts = 60
+sso_max_attempts = 10
+window_seconds = 60
+trust_proxy = true
+api_max_requests = 500
+api_window_seconds = 60
+
+[calling]
+max_call_duration = 900
+audio_dir = "/app/audio"
+transfer_timeout_secs = 120
+recording_enabled = false
+udp_port_min = 50000
+udp_port_max = 50100
+public_ip = "62.171.189.222"
+relay_only = false
+
+[[calling.ice_servers]]
+urls = ["stun:stun.l.google.com:19302"]
+
+[tts]
+piper_binary = "/usr/local/bin/piper"
+piper_model = "/opt/piper/models/en_US-lessac-medium.onnx"
+opusenc_binary = "opusenc"
+
+[default_admin]
+email = "admin@nexuscloud.uk"
+password = "overridden-by-dokploy"
+full_name = "Nexus Administrator"
