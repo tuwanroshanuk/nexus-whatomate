@@ -404,9 +404,11 @@ func (m *Manager) createPeerConnection() (*webrtc.PeerConnection, error) {
 		// Log which candidate pair ICE actually selected. Host-candidate pairs
 		// routed through the Docker port-mapped bridge have shown unreliable
 		// DTLS/SRTP establishment even after ICE itself reports "connected"
-		// (see internal/calling/webrtc.go media-timeout handling below); this
-		// makes that visible in logs instead of only inferring it after a
-		// timeout or an unexplained "closed" transition.
+		// (see the media-timeout handling in negotiateWebRTC); this makes
+		// that visible in logs instead of only inferring it after a timeout
+		// or an unexplained "closed" transition. Logged as raw stats values
+		// (not .String()) since exact field/method availability varies by
+		// pion/webrtc version — the structured logger formats them fine.
 		if state == webrtc.ICEConnectionStateConnected {
 			go func() {
 				for _, s := range pc.GetStats() {
@@ -414,17 +416,10 @@ func (m *Manager) createPeerConnection() (*webrtc.PeerConnection, error) {
 					if !ok || !pair.Nominated {
 						continue
 					}
-					var localType, remoteType string
-					if ls, ok := pc.GetStats()[pair.LocalCandidateID].(webrtc.ICECandidateStats); ok {
-						localType = ls.CandidateType.String()
-					}
-					if rs, ok := pc.GetStats()[pair.RemoteCandidateID].(webrtc.ICECandidateStats); ok {
-						remoteType = rs.CandidateType.String()
-					}
 					m.log.Info("Selected ICE candidate pair",
-						"local_type", localType,
-						"remote_type", remoteType,
-						"state", pair.State.String(),
+						"state", pair.State,
+						"local_candidate_id", pair.LocalCandidateID,
+						"remote_candidate_id", pair.RemoteCandidateID,
 					)
 				}
 			}()
