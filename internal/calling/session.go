@@ -191,10 +191,17 @@ func NewManager(cfg *config.CallingConfig, s3Client *storage.S3Client, db *gorm.
 // calls; after WebRTC media connects, webrtc.go kicks off a transfer to this
 // agent directly instead of running runIVRFlow.
 func (m *Manager) HandleIncomingCall(account *models.WhatsAppAccount, contact *models.Contact, callLog *models.CallLog, sdpOffer string, stickyAgentID *uuid.UUID) {
-	// A caller may redial before Meta delivers the previous terminate event.
-	// Cancel and remove every older session for this caller/account first so
-	// stale media-timeout goroutines cannot terminate or interfere with the
-	// new call. Every incoming call therefore starts from a clean IVR state.
+	// Meta may retry the same connect webhook. Never replace a live session
+	// with another object carrying the same call ID; late goroutines from the
+	// first object could otherwise close the replacement.
+	if existing := m.GetSession(callLog.WhatsAppCallID); existing != nil {
+		m.log.Info("Ignoring duplicate incoming call connect event", "call_id", callLog.WhatsAppCallID)
+		return
+	}
+
+	// Remove only sessions that are demonstrably stale. Active calls from the
+	// same caller are allowed to coexist and delayed webhook delivery cannot
+	// terminate the newer call.
 	m.resetCallerSessions(account.OrganizationID, account.Name, contact.PhoneNumber, callLog.WhatsAppCallID)
 	callCtx, callCancel := context.WithCancel(context.Background())
 	session := &CallSession{
@@ -229,8 +236,10 @@ func (m *Manager) HandleIncomingCall(account *models.WhatsAppAccount, contact *m
 		"has_sdp_offer", sdpOffer != "",
 	)
 
-	// Start WebRTC negotiation using the consumer's SDP offer
-	go m.negotiateWebRTC(session, account, sdpOffer)
+	// Start WebRTC negotiation using the consumer's SDP offer.
+	m.safeGo("negotiateWebRTC", session.ID, func() {
+		m.negotiateWebRTC(session, account, sdpOffer)
+	})
 }
 
 // HandleCallEvent processes a call lifecycle event (in_call, ended, etc.)
@@ -273,46 +282,60 @@ func (m *Manager) HandleCallEvent(callID, event string) {
 	case "end_transfer":
 		m.EndTransfer(transferID)
 	case "cleanup":
-		go m.cleanupSession(callID)
+		m.endSession(session, "remote_call_ended", "HandleCallEvent")
 	}
 }
 
-// EndCall terminates a call session and cleans up resources
+// EndCall terminates the currently registered call session.
+// Legacy call sites may only have a call ID, so resolve the concrete
+// session first and delegate to the identity-safe, idempotent owner.
 func (m *Manager) EndCall(callID string) {
-	if session := m.GetSession(callID); session != nil {
-		session.mu.Lock()
-		if session.Cancel != nil {
-			session.Cancel()
-		}
-		session.Status = models.CallStatusCompleted
-		session.mu.Unlock()
-	}
-	m.cleanupSession(callID)
+	m.endCurrentSessionByID(callID, "legacy_end_call", "EndCall")
 }
 
-// resetCallerSessions removes older sessions for the same caller before a redial.
+// resetCallerSessions removes only demonstrably dead sessions for the same
+// caller. A second live call or an out-of-order connect webhook must never
+// tear down an active call that already has media in progress.
 func (m *Manager) resetCallerSessions(orgID uuid.UUID, accountName, callerPhone, keepCallID string) {
 	m.mu.RLock()
-	var stale []*CallSession
+	candidates := make([]*CallSession, 0)
 	for id, session := range m.sessions {
 		if id != keepCallID && session.OrganizationID == orgID && session.AccountName == accountName && session.CallerPhone == callerPhone {
-			stale = append(stale, session)
+			candidates = append(candidates, session)
 		}
 	}
 	m.mu.RUnlock()
 
-	for _, session := range stale {
+	for _, session := range candidates {
 		session.mu.Lock()
-		if session.Cancel != nil {
-			session.Cancel()
+		age := time.Since(session.StartedAt)
+		peer := session.PeerConnection
+		ctxDone := false
+		if session.Context != nil {
+			select {
+			case <-session.Context.Done():
+				ctxDone = true
+			default:
+			}
 		}
-		session.Status = models.CallStatusCompleted
-		if session.TransferStatus == models.CallTransferStatusWaiting {
-			session.TransferStatus = models.CallTransferStatusAbandoned
-		}
+		terminalPeer := peer != nil && isTerminalPeerState(peer)
 		session.mu.Unlock()
-		m.log.Info("Resetting stale caller session before redial", "old_call_id", session.ID, "new_call_id", keepCallID)
-		m.cleanupSession(session.ID)
+
+		if !ctxDone && !terminalPeer && age <= 90*time.Second {
+			m.log.Info("Keeping active caller session during redial",
+				"old_call_id", session.ID,
+				"new_call_id", keepCallID,
+				"age_secs", int(age.Seconds()),
+			)
+			continue
+		}
+
+		m.log.Info("Cleaning stale caller session before redial",
+			"old_call_id", session.ID,
+			"new_call_id", keepCallID,
+			"age_secs", int(age.Seconds()),
+		)
+		m.endSession(session, "stale_redial_session", "resetCallerSessions")
 	}
 }
 

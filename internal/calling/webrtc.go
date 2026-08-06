@@ -39,7 +39,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	if err != nil {
 		m.log.Error("Failed to create peer connection", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.EndCall(session.ID)
+		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 		return
 	}
 
@@ -52,7 +52,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	if err != nil {
 		m.log.Error("Failed to create audio track", "error", err)
 		m.signalReject(session, waAccount)
-		m.EndCall(session.ID)
+		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 		return
 	}
 
@@ -70,7 +70,9 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 
 		// Check if this is a dedicated telephone-event track (DTMF)
 		if track.Codec().MimeType == "audio/telephone-event" {
-			go m.handleDTMFTrack(session, track)
+			m.safeGo("handleDTMFTrack", session.ID, func() {
+				m.handleDTMFTrack(session, track)
+			})
 			return
 		}
 
@@ -92,13 +94,15 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 
 		// Consume audio and detect inline DTMF (telephone-event packets
 		// arrive on the same m-line as audio with a different payload type).
-		go m.consumeAudioWithDTMF(session, track)
+		m.safeGo("consumeAudioWithDTMF", session.ID, func() {
+			m.consumeAudioWithDTMF(session, track)
+		})
 	})
 
 	// Buffered state events let negotiation observe terminal transitions without
 	// blocking Pion's callback goroutine. A connection that briefly reaches
 	// connected and then closes must never continue to WhatsApp accept/IVR.
-	stateEvents := make(chan webrtc.PeerConnectionState, 8)
+	stateEvents := make(chan webrtc.PeerConnectionState, 16)
 
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		m.log.Info("Peer connection state changed",
@@ -109,9 +113,8 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		case stateEvents <- state:
 		default:
 		}
-		if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
-			m.EndCall(session.ID)
-		}
+		// State callbacks only publish events. Cleanup has one owner in
+		// endSession; calling it synchronously here makes Close() re-entrant.
 	})
 
 	// abortIfPeerTerminal checks whether the peer connection has already
@@ -141,7 +144,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		} else {
 			m.signalReject(session, waAccount)
 		}
-		m.EndCall(session.ID)
+		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 		return true
 	}
 
@@ -152,7 +155,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	}); err != nil {
 		m.log.Error("Failed to set remote description (consumer offer)", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.EndCall(session.ID)
+		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 		return
 	}
 
@@ -161,14 +164,14 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	if err != nil {
 		m.log.Error("Failed to create SDP answer", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.EndCall(session.ID)
+		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 		return
 	}
 
 	if err := pc.SetLocalDescription(answer); err != nil {
 		m.log.Error("Failed to set local description (answer)", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.EndCall(session.ID)
+		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 		return
 	}
 
@@ -177,7 +180,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	if err != nil {
 		m.log.Error("ICE gathering failed", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.EndCall(session.ID)
+		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 		return
 	}
 
@@ -191,7 +194,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	if err := m.whatsapp.PreAcceptCall(ctx, waAccount, session.ID, sdpAnswer); err != nil {
 		m.log.Error("Failed to pre-accept call", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.EndCall(session.ID)
+		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 		return
 	}
 	if abortIfPeerTerminal("after_pre_accept", true) {
@@ -208,7 +211,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		// while we've torn everything down locally — that would otherwise
 		// leave the caller listening to dead air until Meta's own timeout.
 		m.terminateCall(session, waAccount)
-		m.EndCall(session.ID)
+		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 		return
 	}
 	if abortIfPeerTerminal("after_accept", true) {
@@ -239,7 +242,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 			case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
 				m.log.Error("WebRTC peer closed before media became usable", "call_id", session.ID, "state", state.String())
 				m.terminateCall(session, waAccount)
-				m.EndCall(session.ID)
+				m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 				return
 			}
 		case <-mediaTimer.C:
@@ -258,26 +261,32 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 				m.log.Error("WebRTC media connection timed out (ICE never connected)", "call_id", session.ID, "ice_state", iceState.String())
 			}
 			m.terminateCall(session, waAccount)
-			m.EndCall(session.ID)
+			m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
 			return
 		}
 	}
 	m.log.Info("WebRTC media connected", "call_id", session.ID)
 
 	// Brief delay to ensure the selected ICE path remains stable before audio.
-	stabilize := time.NewTimer(750 * time.Millisecond)
+	// Ignore queued non-terminal state events instead of letting them bypass
+	// the entire stabilization interval.
+	stabilize := time.NewTimer(500 * time.Millisecond)
 	defer stabilize.Stop()
-	select {
-	case <-ctx.Done():
-		return
-	case state := <-stateEvents:
-		if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
-			m.log.Error("WebRTC peer closed during media stabilization", "call_id", session.ID, "state", state.String())
-			m.terminateCall(session, waAccount)
-			m.EndCall(session.ID)
+stabilizeLoop:
+	for {
+		select {
+		case <-ctx.Done():
 			return
+		case state := <-stateEvents:
+			if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
+				m.log.Error("WebRTC peer closed during media stabilization", "call_id", session.ID, "state", state.String())
+				m.terminateCall(session, waAccount)
+				m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
+				return
+			}
+		case <-stabilize.C:
+			break stabilizeLoop
 		}
-	case <-stabilize.C:
 	}
 	if abortIfPeerTerminal("before_ivr", true) {
 		return
@@ -289,13 +298,84 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	// empty team target keeps the no-team broadcast as the eventual
 	// fallback if the sticky agent doesn't answer.
 	if session.StickyAgentID != nil {
-		go m.initiateTransfer(session, session.AccountName, "", nil)
-		return
+		m.safeGo("initiateTransfer", session.ID, func() {
+			m.initiateTransfer(session, session.AccountName, "", nil)
+		})
+	} else if session.IVRFlow != nil {
+		m.safeGo("runIVRFlow", session.ID, func() {
+			m.runIVRFlow(session, waAccount)
+		})
 	}
 
-	// Start IVR flow if configured
-	if session.IVRFlow != nil {
-		go m.runIVRFlow(session, waAccount)
+	// Negotiation used to return here, leaving no owner for disconnect or
+	// failure events after IVR started. Keep a dedicated monitor alive.
+	m.safeGo("monitorPeerConnection", session.ID, func() {
+		m.monitorPeerConnection(session, stateEvents, waAccount)
+	})
+}
+
+func (m *Manager) monitorPeerConnection(session *CallSession, stateEvents <-chan webrtc.PeerConnectionState, waAccount *whatsapp.Account) {
+	ctx := session.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	var disconnectTimer *time.Timer
+	var disconnectC <-chan time.Time
+	stopDisconnectTimer := func() {
+		if disconnectTimer == nil {
+			return
+		}
+		if !disconnectTimer.Stop() {
+			select {
+			case <-disconnectTimer.C:
+			default:
+			}
+		}
+		disconnectTimer = nil
+		disconnectC = nil
+	}
+	defer stopDisconnectTimer()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-disconnectC:
+			if !m.isCurrentSession(session) {
+				return
+			}
+			m.log.Error("WebRTC peer remained disconnected past grace period", "call_id", session.ID)
+			m.signalTerminate(session, waAccount)
+			m.endSession(session, "peer_disconnected_timeout", "monitorPeerConnection")
+			return
+		case state := <-stateEvents:
+			switch state {
+			case webrtc.PeerConnectionStateConnected:
+				stopDisconnectTimer()
+			case webrtc.PeerConnectionStateDisconnected:
+				if disconnectTimer == nil {
+					disconnectTimer = time.NewTimer(8 * time.Second)
+					disconnectC = disconnectTimer.C
+				}
+			case webrtc.PeerConnectionStateFailed:
+				if !m.isCurrentSession(session) {
+					return
+				}
+				m.signalTerminate(session, waAccount)
+				m.endSession(session, "peer_failed", "monitorPeerConnection")
+				return
+			case webrtc.PeerConnectionStateClosed:
+				// Closed normally confirms our own cleanup. Only treat it as a
+				// failure while this exact session is still the active map entry.
+				if m.isCurrentSession(session) {
+					m.log.Error("Active peer connection closed unexpectedly", "call_id", session.ID)
+					m.signalTerminate(session, waAccount)
+					m.endSession(session, "unexpected_peer_closed", "monitorPeerConnection")
+				}
+				return
+			}
+		}
 	}
 }
 
