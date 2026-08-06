@@ -20,7 +20,11 @@ import (
 //  5. Business sends accept with the same session object
 //  6. WebRTC media flows
 func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsAppAccount, sdpOffer string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	baseCtx := session.Context
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(baseCtx, 30*time.Second)
 	defer cancel()
 
 	waAccount := account.ToWAAccount()
@@ -161,17 +165,29 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	// Wait for the WebRTC media connection to be established before starting IVR.
 	// ICE connectivity checks run after the SDP exchange; we must wait for them
 	// to complete before audio can flow.
+	mediaTimer := time.NewTimer(15 * time.Second)
+	defer mediaTimer.Stop()
 	select {
+	case <-ctx.Done():
+		m.log.Info("WebRTC negotiation cancelled for stale/ended call", "call_id", session.ID)
+		return
 	case <-connected:
 		m.log.Info("WebRTC media connected", "call_id", session.ID)
-	case <-time.After(15 * time.Second):
+	case <-mediaTimer.C:
 		m.log.Error("WebRTC media connection timed out", "call_id", session.ID)
 		m.terminateCall(session, waAccount)
+		m.EndCall(session.ID)
 		return
 	}
 
-	// Brief delay to let the media path stabilize before sending audio
-	time.Sleep(500 * time.Millisecond)
+	// Brief delay to let the media path stabilize before sending audio.
+	stabilize := time.NewTimer(500 * time.Millisecond)
+	defer stabilize.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-stabilize.C:
+	}
 
 	// Sticky-routed call: skip IVR entirely and ring the originating agent
 	// directly via the existing transfer flow. initiateTransfer's

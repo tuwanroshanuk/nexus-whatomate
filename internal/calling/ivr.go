@@ -51,25 +51,8 @@ func (m *Manager) runIVRFlow(session *CallSession, waAccount *whatsapp.Account) 
 		CurrentNode: graph.EntryNode,
 	}
 
-	// Load existing IVR path from call log (for goto_flow accumulation)
-	var existingLog models.CallLog
-	if err := m.db.Select("ivr_path").Where("id = ?", session.CallLogID).First(&existingLog).Error; err == nil {
-		if existingLog.IVRPath != nil {
-			if steps, ok := existingLog.IVRPath["steps"].([]any); ok {
-				for _, s := range steps {
-					if stepMap, ok := s.(map[string]any); ok {
-						entry := map[string]string{}
-						for k, v := range stepMap {
-							if str, ok := v.(string); ok {
-								entry[k] = str
-							}
-						}
-						ivrCtx.Path = append(ivrCtx.Path, entry)
-					}
-				}
-			}
-		}
-	}
+	// Every call starts with an empty IVR path. Previous call progress must
+	// never be restored into a new call session.
 
 	// Record flow start if this is the first entry
 	if len(ivrCtx.Path) == 0 {
@@ -130,6 +113,14 @@ func (m *Manager) runIVRFlow(session *CallSession, waAccount *whatsapp.Account) 
 // executeNodeLoop dispatches to type-specific executors in a loop.
 func (m *Manager) executeNodeLoop(session *CallSession, waAccount *whatsapp.Account, graph *IVRFlowGraph, ctx *IVRContext, player *AudioPlayer) {
 	for {
+		if session.Context != nil {
+			select {
+			case <-session.Context.Done():
+				m.saveIVRPath(session, ctx.Path)
+				return
+			default:
+			}
+		}
 		// Check session is still active
 		session.mu.Lock()
 		status := session.Status
@@ -217,8 +208,11 @@ func (m *Manager) executeNodeLoop(session *CallSession, waAccount *whatsapp.Acco
 		// Resolve the next node via edges
 		nextID := graph.ResolveEdge(node.ID, outcome)
 		if nextID == "" {
-			m.log.Info("No matching edge, ending IVR flow", "call_id", session.ID, "node", node.ID, "outcome", outcome)
-			break
+			m.log.Info("No matching edge, ending call cleanly", "call_id", session.ID, "node", node.ID, "outcome", outcome)
+			m.saveIVRPath(session, ctx.Path)
+			m.terminateCall(session, waAccount)
+			m.EndCall(session.ID)
+			return
 		}
 
 		ctx.CurrentNode = nextID

@@ -39,6 +39,8 @@ type CallSession struct {
 	IVRPlayer      *AudioPlayer // persists across goto_flow for RTP continuity
 	DTMFBuffer     chan byte
 	StartedAt      time.Time
+	Context        context.Context
+	Cancel         context.CancelFunc
 
 	// Recording (one per direction for correct OGG/Opus playback)
 	CallerRecorder *CallRecorder // caller's audio stream
@@ -189,6 +191,12 @@ func NewManager(cfg *config.CallingConfig, s3Client *storage.S3Client, db *gorm.
 // calls; after WebRTC media connects, webrtc.go kicks off a transfer to this
 // agent directly instead of running runIVRFlow.
 func (m *Manager) HandleIncomingCall(account *models.WhatsAppAccount, contact *models.Contact, callLog *models.CallLog, sdpOffer string, stickyAgentID *uuid.UUID) {
+	// A caller may redial before Meta delivers the previous terminate event.
+	// Cancel and remove every older session for this caller/account first so
+	// stale media-timeout goroutines cannot terminate or interfere with the
+	// new call. Every incoming call therefore starts from a clean IVR state.
+	m.resetCallerSessions(account.OrganizationID, account.Name, contact.PhoneNumber, callLog.WhatsAppCallID)
+	callCtx, callCancel := context.WithCancel(context.Background())
 	session := &CallSession{
 		ID:             callLog.WhatsAppCallID,
 		OrganizationID: account.OrganizationID,
@@ -199,6 +207,8 @@ func (m *Manager) HandleIncomingCall(account *models.WhatsAppAccount, contact *m
 		Status:         models.CallStatusRinging,
 		DTMFBuffer:     make(chan byte, 32),
 		StartedAt:      time.Now(),
+		Context:        callCtx,
+		Cancel:         callCancel,
 		BridgeStarted:  make(chan struct{}),
 		StickyAgentID:  stickyAgentID,
 	}
@@ -241,6 +251,9 @@ func (m *Manager) HandleCallEvent(callID, event string) {
 	case "in_call", "connect":
 		session.Status = models.CallStatusAnswered
 	case "ended", "terminate", "missed", "unanswered":
+		if session.Cancel != nil {
+			session.Cancel()
+		}
 		switch session.TransferStatus {
 		case models.CallTransferStatusWaiting:
 			action = "hangup_transfer"
@@ -266,7 +279,41 @@ func (m *Manager) HandleCallEvent(callID, event string) {
 
 // EndCall terminates a call session and cleans up resources
 func (m *Manager) EndCall(callID string) {
+	if session := m.GetSession(callID); session != nil {
+		session.mu.Lock()
+		if session.Cancel != nil {
+			session.Cancel()
+		}
+		session.Status = models.CallStatusCompleted
+		session.mu.Unlock()
+	}
 	m.cleanupSession(callID)
+}
+
+// resetCallerSessions removes older sessions for the same caller before a redial.
+func (m *Manager) resetCallerSessions(orgID uuid.UUID, accountName, callerPhone, keepCallID string) {
+	m.mu.RLock()
+	var stale []*CallSession
+	for id, session := range m.sessions {
+		if id != keepCallID && session.OrganizationID == orgID && session.AccountName == accountName && session.CallerPhone == callerPhone {
+			stale = append(stale, session)
+		}
+	}
+	m.mu.RUnlock()
+
+	for _, session := range stale {
+		session.mu.Lock()
+		if session.Cancel != nil {
+			session.Cancel()
+		}
+		session.Status = models.CallStatusCompleted
+		if session.TransferStatus == models.CallTransferStatusWaiting {
+			session.TransferStatus = models.CallTransferStatusAbandoned
+		}
+		session.mu.Unlock()
+		m.log.Info("Resetting stale caller session before redial", "old_call_id", session.ID, "new_call_id", keepCallID)
+		m.cleanupSession(session.ID)
+	}
 }
 
 // GetSession returns a call session by ID
@@ -345,6 +392,8 @@ func (m *Manager) cleanupSession(callID string) {
 
 	// Snapshot state and resources under lock, then release before calling external methods
 	session.mu.Lock()
+	cancelSession := session.Cancel
+	session.Cancel = nil
 
 	// Transfer state snapshot for DB updates
 	transferID := session.TransferID
@@ -373,7 +422,6 @@ func (m *Manager) cleanupSession(callID string) {
 	session.WAPeerConn = nil
 	peerConn := session.PeerConnection
 	session.PeerConnection = nil
-	dtmfBuffer := session.DTMFBuffer
 	session.DTMFBuffer = nil
 	callerRec := session.CallerRecorder
 	session.CallerRecorder = nil
@@ -383,6 +431,10 @@ func (m *Manager) cleanupSession(callID string) {
 	session.TransferDone = nil
 
 	session.mu.Unlock()
+
+	if cancelSession != nil {
+		cancelSession()
+	}
 
 	// Close TransferDone to unblock any waiting IVR goroutine
 	if transferDone != nil {
@@ -444,10 +496,8 @@ func (m *Manager) cleanupSession(callID string) {
 		}
 	}
 
-	// Close DTMF buffer channel
-	if dtmfBuffer != nil {
-		close(dtmfBuffer)
-	}
+	// Do not close DTMFBuffer. RTP/IVR readers may still hold a reference
+	// during peer shutdown; they are stopped through the session context.
 
 	// Finalize recording (async — don't block cleanup)
 	if callerRec != nil || agentRec != nil {
