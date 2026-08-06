@@ -49,7 +49,13 @@ services:
       WHATOMATE_CALLING__PUBLIC_IP: 62.171.189.222
       WHATOMATE_CALLING__UDP_PORT_MIN: "50000"
       WHATOMATE_CALLING__UDP_PORT_MAX: "50100"
-      WHATOMATE_CALLING__RELAY_ONLY: ${WHATOMATE_CALLING__RELAY_ONLY:-false}
+      # Forced to true by default: ICE was intermittently selecting the
+      # host-candidate pair (direct to the Docker port-mapped bridge) whose
+      # DTLS/SRTP handshake proved unreliable — either stalling indefinitely
+      # (15s media timeout) or collapsing seconds after appearing to connect.
+      # Cloudflare TURN relay candidates are already provisioned and reliable;
+      # this forces every call through them. Override via env if needed.
+      WHATOMATE_CALLING__RELAY_ONLY: ${WHATOMATE_CALLING__RELAY_ONLY:-true}
       WHATOMATE_CALLING__CLOUDFLARE_TURN_KEY_ID: ${WHATOMATE_CALLING__CLOUDFLARE_TURN_KEY_ID}
       WHATOMATE_CALLING__CLOUDFLARE_TURN_API_TOKEN: ${WHATOMATE_CALLING__CLOUDFLARE_TURN_API_TOKEN}
       WHATOMATE_CALLING__CLOUDFLARE_TURN_TTL: ${WHATOMATE_CALLING__CLOUDFLARE_TURN_TTL:-3600}

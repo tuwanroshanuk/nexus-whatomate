@@ -174,6 +174,13 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	// Step 4: Accept with the same SDP answer
 	if err := m.whatsapp.AcceptCall(ctx, waAccount, session.ID, sdpAnswer); err != nil {
 		m.log.Error("Failed to accept call via API", "error", err, "call_id", session.ID)
+		// The failure may be purely local (e.g. our context was canceled
+		// because the peer connection closed mid-request) even though the
+		// POST already reached Meta's servers. Explicitly terminate on a
+		// fresh context so we never leave Meta believing the call is live
+		// while we've torn everything down locally — that would otherwise
+		// leave the caller listening to dead air until Meta's own timeout.
+		m.terminateCall(session, waAccount)
 		m.EndCall(session.ID)
 		return
 	}
@@ -209,7 +216,20 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 				return
 			}
 		case <-mediaTimer.C:
-			m.log.Error("WebRTC media connection timed out", "call_id", session.ID)
+			// ICEConnectionState reaching "connected" only means STUN
+			// connectivity checks passed; PeerConnectionState additionally
+			// requires the DTLS-SRTP handshake to finish. If ICE connected but
+			// we're still here, the handshake stalled on the selected pair —
+			// almost always the host candidate, not the TURN relay pair. See
+			// "Selected ICE candidate pair" log above for which pair was used.
+			iceState := pc.ICEConnectionState()
+			if iceState == webrtc.ICEConnectionStateConnected || iceState == webrtc.ICEConnectionStateCompleted {
+				m.log.Error("WebRTC media connection timed out (ICE connected, DTLS handshake never completed — "+
+					"likely a host-candidate NAT/MTU issue; consider WHATOMATE_CALLING__RELAY_ONLY=true)",
+					"call_id", session.ID)
+			} else {
+				m.log.Error("WebRTC media connection timed out (ICE never connected)", "call_id", session.ID, "ice_state", iceState.String())
+			}
 			m.terminateCall(session, waAccount)
 			m.EndCall(session.ID)
 			return
@@ -381,6 +401,34 @@ func (m *Manager) createPeerConnection() (*webrtc.PeerConnection, error) {
 	})
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		m.log.Info("ICE connection state changed", "state", state.String())
+		// Log which candidate pair ICE actually selected. Host-candidate pairs
+		// routed through the Docker port-mapped bridge have shown unreliable
+		// DTLS/SRTP establishment even after ICE itself reports "connected"
+		// (see internal/calling/webrtc.go media-timeout handling below); this
+		// makes that visible in logs instead of only inferring it after a
+		// timeout or an unexplained "closed" transition.
+		if state == webrtc.ICEConnectionStateConnected {
+			go func() {
+				for _, s := range pc.GetStats() {
+					pair, ok := s.(webrtc.ICECandidatePairStats)
+					if !ok || !pair.Nominated {
+						continue
+					}
+					var localType, remoteType string
+					if ls, ok := pc.GetStats()[pair.LocalCandidateID].(webrtc.ICECandidateStats); ok {
+						localType = ls.CandidateType.String()
+					}
+					if rs, ok := pc.GetStats()[pair.RemoteCandidateID].(webrtc.ICECandidateStats); ok {
+						remoteType = rs.CandidateType.String()
+					}
+					m.log.Info("Selected ICE candidate pair",
+						"local_type", localType,
+						"remote_type", remoteType,
+						"state", pair.State.String(),
+					)
+				}
+			}()
+		}
 	})
 
 	return pc, nil
