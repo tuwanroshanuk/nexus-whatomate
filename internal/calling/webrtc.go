@@ -77,6 +77,8 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	ctx, cancel := context.WithTimeout(baseCtx, 30*time.Second)
 	defer cancel()
 
+	// Decrypt access token before use — the model stores it encrypted at rest.
+	account.DecryptSecrets(m.encryptionKey)
 	waAccount := account.ToWAAccount()
 
 	// Create peer connection with Opus codec
@@ -454,6 +456,22 @@ func (m *Manager) monitorPeerConnection(session *CallSession, stateEvents <-chan
 			case webrtc.PeerConnectionStateFailed:
 				if !m.isCurrentSession(session) {
 					return
+				}
+				// PeerConnectionState=failed with ICE still active is a
+				// transient DTLS condition — give it a 6s grace window to
+				// recover before terminating (same logic as the media-wait
+				// loop in negotiateWebRTC).
+				iceState := pc.ICEConnectionState()
+				if iceState == webrtc.ICEConnectionStateConnected ||
+					iceState == webrtc.ICEConnectionStateChecking ||
+					iceState == webrtc.ICEConnectionStateCompleted {
+					if disconnectTimer == nil {
+						disconnectTimer = time.NewTimer(6 * time.Second)
+						disconnectC = disconnectTimer.C
+						m.log.Info("PeerConnection failed but ICE still active in monitor — starting grace timer",
+							"call_id", session.ID, "ice_state", iceState.String())
+					}
+					continue
 				}
 				m.signalTerminate(session, waAccount)
 				m.endSession(session, "peer_failed", "monitorPeerConnection")
