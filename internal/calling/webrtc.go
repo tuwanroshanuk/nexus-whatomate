@@ -3,6 +3,7 @@ package calling
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pion/webrtc/v4"
@@ -208,10 +209,29 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		return true
 	}
 
-	// Step 1: Set the consumer's SDP offer as remote description
+	// Step 1: Set the consumer's SDP offer as remote description.
+	//
+	// DTLS role fix: Meta's SDP offer sends "a=setup:active", which tells Pion
+	// to take the passive DTLS role (server). However, pion/dtls has a bug
+	// where SetAnsweringDTLSRole(Server) is ignored when the remote SDP says
+	// "active" — pion still starts as client and fires ClientHello immediately
+	// when ICE connects. Meta's media server isn't ready yet (still processing
+	// the AcceptCall POST, ~0.8s), drops the ClientHello, and Pion's DTLS
+	// state machine fails → PeerConnectionState=failed within ~300ms.
+	//
+	// Fix: rewrite "a=setup:active" → "a=setup:actpass" in the remote SDP
+	// before SetRemoteDescription. "actpass" means the remote is willing to
+	// act as either client or server. Pion, configured with DTLSRoleServer,
+	// will then correctly adopt the passive role and wait for Meta to send
+	// the ClientHello — which only happens after AcceptCall completes, neatly
+	// avoiding the race.
+	patchedOffer := strings.ReplaceAll(sdpOffer, "a=setup:active", "a=setup:actpass")
+	if patchedOffer != sdpOffer {
+		m.log.Info("Patched remote SDP: a=setup:active → a=setup:actpass (DTLS passive role fix)", "call_id", session.ID)
+	}
 	if err := pc.SetRemoteDescription(webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
-		SDP:  sdpOffer,
+		SDP:  patchedOffer,
 	}); err != nil {
 		m.log.Error("Failed to set remote description (consumer offer)", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
@@ -287,7 +307,7 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	// Wait for the WebRTC media connection to be established before starting IVR.
 	// ICE connectivity checks run after the SDP exchange; we must wait for them
 	// to complete before audio can flow.
-	mediaTimer := time.NewTimer(15 * time.Second)
+	mediaTimer := time.NewTimer(30 * time.Second)
 	defer mediaTimer.Stop()
 	mediaConnected := false
 	for !mediaConnected {

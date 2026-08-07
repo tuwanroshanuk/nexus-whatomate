@@ -12,7 +12,26 @@ import (
 
 func isTerminalPeerState(pc *webrtc.PeerConnection) bool {
 	state := pc.ConnectionState()
-	return state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed
+	if state == webrtc.PeerConnectionStateClosed {
+		return true
+	}
+	if state == webrtc.PeerConnectionStateFailed {
+		// PeerConnectionState=failed with ICE still active is a transient DTLS
+		// race — Meta's media server fires ClientHello after AcceptCall completes
+		// (~0.8s), and Pion marks the DTLS transport failed if the first
+		// handshake times out. ICE being connected means the underlying path is
+		// still alive and DTLS recovery is possible. Do NOT consider this
+		// terminal; the negotiateWebRTC media-wait loop handles the actual
+		// timeout (30s) and will tear down correctly if DTLS never recovers.
+		iceState := pc.ICEConnectionState()
+		if iceState == webrtc.ICEConnectionStateConnected ||
+			iceState == webrtc.ICEConnectionStateChecking ||
+			iceState == webrtc.ICEConnectionStateCompleted {
+			return false // ICE alive — DTLS may still recover
+		}
+		return true
+	}
+	return false
 }
 
 func (m *Manager) recoverAndLog(where, callID string) {
