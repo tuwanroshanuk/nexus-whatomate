@@ -1195,7 +1195,7 @@ export const outgoingCallsService = {
     api.post<{ call_log_id: string; sdp_answer: string }>('/calls/outgoing', data),
   hangup: (callLogId: string) =>
     api.post(`/calls/outgoing/${callLogId}/hangup`),
-  requestPermission: (data: { contact_id: string; whatsapp_account: string }) =>
+  requestPermission: (data: { contact_id: string; whatsapp_account: string; method?: 'interactive' | 'template' }) =>
     api.post<{ permission_id: string }>('/calls/permission-request', data),
   getPermission: (contactId: string, whatsappAccount: string) =>
     api.get<CallPermission>(`/calls/permission/${contactId}`, { params: { whatsapp_account: whatsappAccount } }),

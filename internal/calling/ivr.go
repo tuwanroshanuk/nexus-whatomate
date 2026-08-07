@@ -340,18 +340,17 @@ func (m *Manager) executeGather(session *CallSession, node *IVRNode, ctx *IVRCon
 	maxRetries := getConfigInt(node.Config, "max_retries", 3)
 	storeAs, _ := node.Config["store_as"].(string)
 
-	m.drainDTMF(session)
-
-	// Play prompt (non-interruptible for gather — we need all digits)
-	if audioFile != "" && m.config.AudioDir != "" {
-		fullPath := filepath.Join(m.config.AudioDir, audioFile)
-		if _, err := player.PlayFile(fullPath); err != nil {
-			m.log.Error("Failed to play gather audio", "error", err, "call_id", session.ID)
-		}
-	}
-
-	// Collect digits
+	// Collect digits with prompt replay on retries
 	for attempt := 0; attempt < maxRetries; attempt++ {
+		m.drainDTMF(session)
+
+		if audioFile != "" && m.config.AudioDir != "" {
+			fullPath := filepath.Join(m.config.AudioDir, audioFile)
+			if _, err := player.PlayFile(fullPath); err != nil {
+				m.log.Error("Failed to play gather audio", "error", err, "call_id", session.ID)
+			}
+		}
+
 		collected := m.collectDTMFDigits(session, player, maxDigits, terminator, time.Duration(timeoutSecs)*time.Second)
 		if collected != "" {
 			if storeAs != "" {

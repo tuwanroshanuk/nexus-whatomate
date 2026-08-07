@@ -335,8 +335,9 @@ func (m *Manager) resetCallerSessions(orgID uuid.UUID, accountName, callerPhone,
 		terminalPeer := peer != nil && isTerminalPeerState(peer)
 		session.mu.Unlock()
 
-		if !ctxDone && !terminalPeer && age <= 90*time.Second {
-			m.log.Info("Keeping active caller session during redial",
+		isLiveCall := session.Status == models.CallStatusAnswered || session.Status == models.CallStatusTransferring
+		if !ctxDone && !terminalPeer && age <= 90*time.Second && isLiveCall {
+			m.log.Info("Keeping active answered caller session during redial",
 				"old_call_id", session.ID,
 				"new_call_id", keepCallID,
 				"age_secs", int(age.Seconds()),

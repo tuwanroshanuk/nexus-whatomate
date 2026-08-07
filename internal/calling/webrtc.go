@@ -178,10 +178,26 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		if state != webrtc.PeerConnectionStateFailed && state != webrtc.PeerConnectionStateClosed {
 			return false
 		}
+		// If PeerConnectionState is reported as failed, but the underlying ICE
+		// connection is still alive (connected or checking), the DTLS handshake
+		// may have failed temporarily because Meta's media server was still
+		// processing the accept POST. Do not terminate the call prematurely if
+		// ICE is still connected.
+		iceState := pc.ICEConnectionState()
+		if state == webrtc.PeerConnectionStateFailed && (iceState == webrtc.ICEConnectionStateConnected || iceState == webrtc.ICEConnectionStateChecking) {
+			m.log.Info("PeerConnection state is failed, but ICE connection is still alive — ignoring premature terminal state",
+				"call_id", session.ID,
+				"stage", stage,
+				"pc_state", state.String(),
+				"ice_state", iceState.String(),
+			)
+			return false
+		}
 		m.log.Error("WebRTC peer became terminal during negotiation",
 			"call_id", session.ID,
 			"stage", stage,
 			"state", state.String(),
+			"ice_state", iceState.String(),
 		)
 		if accepted {
 			m.signalTerminate(session, waAccount)
@@ -283,7 +299,20 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 			switch state {
 			case webrtc.PeerConnectionStateConnected:
 				mediaConnected = true
-			case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
+			case webrtc.PeerConnectionStateFailed:
+				iceState := pc.ICEConnectionState()
+				if iceState == webrtc.ICEConnectionStateConnected || iceState == webrtc.ICEConnectionStateChecking || iceState == webrtc.ICEConnectionStateCompleted {
+					m.log.Info("PeerConnection state changed to failed, but ICE is still active — waiting for media connection/DTLS recovery",
+						"call_id", session.ID,
+						"ice_state", iceState.String(),
+					)
+				} else {
+					m.log.Error("WebRTC peer connection failed and ICE is not connected", "call_id", session.ID, "state", state.String(), "ice_state", iceState.String())
+					m.terminateCall(session, waAccount)
+					m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
+					return
+				}
+			case webrtc.PeerConnectionStateClosed:
 				m.log.Error("WebRTC peer closed before media became usable", "call_id", session.ID, "state", state.String())
 				m.terminateCall(session, waAccount)
 				m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
@@ -540,6 +569,7 @@ func (m *Manager) createPeerConnection() (*webrtc.PeerConnection, error) {
 	// dead peer is still caught by the existing ICE failed/disconnected handling
 	// in negotiateWebRTC's mediaConnected wait and in monitorPeerConnection.
 	settingEngine.DisableCloseByDTLS(true)
+	settingEngine.SetAnsweringDTLSRole(webrtc.DTLSRoleServer)
 
 	// On cloud/AWS, map private IP to public IP so ICE candidates
 	// advertise the reachable address instead of the internal one.

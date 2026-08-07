@@ -110,6 +110,7 @@ func (a *App) SendCallPermissionRequest(r *fastglue.Request) error {
 	var req struct {
 		ContactID       string `json:"contact_id"`
 		WhatsAppAccount string `json:"whatsapp_account"`
+		Method          string `json:"method"` // "interactive" (default) or "template"
 	}
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
@@ -142,14 +143,33 @@ func (a *App) SendCallPermissionRequest(r *fastglue.Request) error {
 	}
 
 	waAccount := account.ToWAAccount()
-
-	// Send permission request via WhatsApp Messages API
 	ctx := r.RequestCtx
 	rcpt := whatsapp.Recipient{Phone: contact.PhoneNumber, BSUID: contact.BSUID}
-	messageID, err := a.WhatsApp.SendCallPermissionRequest(ctx, waAccount, rcpt, "")
-	if err != nil {
-		a.Log.Error("Failed to send call permission request", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send permission request", nil, "")
+
+	var messageID string
+	var sendErr error
+
+	if req.Method == "template" {
+		// Look up approved request_call_permission template
+		var tpl models.Template
+		if err := a.DB.Where("organization_id = ? AND whats_app_account = ? AND name = ? AND status = ?",
+			orgID, req.WhatsAppAccount, "request_call_permission", "APPROVED").First(&tpl).Error; err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Approved 'request_call_permission' template not found for this account. Please sync templates in Messaging > Templates.", nil, "")
+		}
+		messageID, sendErr = a.WhatsApp.SendTemplateMessage(ctx, waAccount, rcpt, tpl.Name, tpl.Language, nil)
+	} else {
+		// Default: send interactive call_permission_request
+		messageID, sendErr = a.WhatsApp.SendCallPermissionRequest(ctx, waAccount, rcpt, "")
+		// Fallback to approved template if interactive fails or template exists
+		if sendErr != nil && strings.Contains(sendErr.Error(), "190") {
+			a.Log.Error("Interactive call permission request failed with auth error 190", "error", sendErr)
+			return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Meta Access Token expired or invalid for this WhatsApp account. Please update access token in Settings.", nil, "")
+		}
+	}
+
+	if sendErr != nil {
+		a.Log.Error("Failed to send call permission request", "error", sendErr)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send permission request: "+sendErr.Error(), nil, "")
 	}
 
 	// Create CallPermission record
@@ -169,6 +189,7 @@ func (a *App) SendCallPermissionRequest(r *fastglue.Request) error {
 
 	return r.SendEnvelope(map[string]string{
 		"permission_id": permission.ID.String(),
+		"message_id":    messageID,
 	})
 }
 
