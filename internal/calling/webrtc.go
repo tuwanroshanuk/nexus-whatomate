@@ -10,30 +10,32 @@ import (
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 )
 
-// negotiateWebRTC handles the SDP exchange and sets up WebRTC media for
-// WhatsApp user-initiated calls.
+// negotiateWebRTC answers a WhatsApp user-initiated call.
+//
+// Correct media order for UIC:
+//   1. Apply Meta's SDP offer.
+//   2. Generate our SDP answer.
+//   3. pre_accept with that answer.
+//   4. Establish ICE + DTLS-SRTP.
+//   5. accept with the exact same SDP answer.
+//   6. Start the resident IVR media stream immediately.
+//
+// Accepting before step 4 can make the Android client briefly display a
+// connected call while DTLS is still unresolved, then terminate with
+// "Couldn't make call". The media connection is therefore the gate for accept.
 func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsAppAccount, sdpOffer string, callerPhone string) {
 	defer m.recoverAndLog("negotiateWebRTC", session.ID)
 
 	const callerCooldownWindow = 350 * time.Millisecond
 	if callerPhone != "" {
 		m.cooldownMu.Lock()
-		if last, ok := m.callerCooldowns[callerPhone]; ok {
+		last, ok := m.callerCooldowns[callerPhone]
+		m.cooldownMu.Unlock()
+		if ok {
 			elapsed := time.Since(last)
 			if elapsed < callerCooldownWindow {
-				remaining := callerCooldownWindow - elapsed
-				m.cooldownMu.Unlock()
-				m.log.Info("Applying per-caller ICE cooldown before negotiation",
-					"call_id", session.ID,
-					"caller", callerPhone,
-					"sleep_ms", remaining.Milliseconds(),
-				)
-				time.Sleep(remaining)
-			} else {
-				m.cooldownMu.Unlock()
+				time.Sleep(callerCooldownWindow - elapsed)
 			}
-		} else {
-			m.cooldownMu.Unlock()
 		}
 	}
 
@@ -49,18 +51,13 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 
 	ctx, cancel := context.WithTimeout(baseCtx, 30*time.Second)
 	defer cancel()
-
 	waAccount := account.ToWAAccount()
 
-	// Meta's Calling media endpoint is ICE-LITE and expects the business media
-	// endpoint to be the DTLS client for user-initiated calls. Use a dedicated
-	// answerer configuration here instead of the generic server-role answerer
-	// used by browser-facing peer connections.
 	pc, err := m.createInboundWhatsAppPeerConnection()
 	if err != nil {
-		m.log.Error("Failed to create peer connection", "error", err, "call_id", session.ID)
+		m.log.Error("Failed to create WhatsApp peer connection", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
+		m.endSession(session, "webrtc_create_failed", "negotiateWebRTC")
 		return
 	}
 
@@ -70,18 +67,23 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 
 	audioTrack, err := createOpusTrack(pc, "ivr-audio")
 	if err != nil {
-		m.log.Error("Failed to create audio track", "error", err)
+		m.log.Error("Failed to create IVR audio track", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
+		m.endSession(session, "audio_track_failed", "negotiateWebRTC")
 		return
 	}
 
+	// Create the player before negotiation completes. The resident media cache
+	// is already hot; after DTLS connects we can prime RTP and enter the graph
+	// without constructing another realtime media object.
+	player := NewAudioPlayer(audioTrack)
 	session.mu.Lock()
 	session.AudioTrack = audioTrack
+	session.IVRPlayer = player
 	session.mu.Unlock()
 
-	pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		m.log.Info("Received remote track",
+	pc.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+		m.log.Info("Received WhatsApp remote track",
 			"call_id", session.ID,
 			"codec", track.Codec().MimeType,
 			"payload_type", track.PayloadType(),
@@ -110,58 +112,24 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		})
 	})
 
-	stateEvents := make(chan webrtc.PeerConnectionState, 16)
+	stateEvents := make(chan webrtc.PeerConnectionState, 32)
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		m.log.Info("Peer connection state changed",
-			"call_id", session.ID,
-			"state", state.String(),
-		)
+		m.log.Info("Peer connection state changed", "call_id", session.ID, "state", state.String())
 		select {
 		case stateEvents <- state:
 		default:
 		}
 	})
 
-	abortIfPeerTerminal := func(stage string, accepted bool) bool {
-		state := pc.ConnectionState()
-		if state != webrtc.PeerConnectionStateFailed && state != webrtc.PeerConnectionStateClosed {
-			return false
-		}
-		iceState := pc.ICEConnectionState()
-		if state == webrtc.PeerConnectionStateFailed && (iceState == webrtc.ICEConnectionStateConnected || iceState == webrtc.ICEConnectionStateChecking) {
-			m.log.Info("PeerConnection state is failed, but ICE connection is still alive — ignoring premature terminal state",
-				"call_id", session.ID,
-				"stage", stage,
-				"pc_state", state.String(),
-				"ice_state", iceState.String(),
-			)
-			return false
-		}
-		m.log.Error("WebRTC peer became terminal during negotiation",
-			"call_id", session.ID,
-			"stage", stage,
-			"state", state.String(),
-			"ice_state", iceState.String(),
-		)
-		if accepted {
-			m.signalTerminate(session, waAccount)
-		} else {
-			m.signalReject(session, waAccount)
-		}
-		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
-		return true
-	}
-
-	// Do not rewrite Meta's SDP setup attribute. The offer is authoritative.
-	// Rewriting setup:active to actpass changes the DTLS role contract and can
-	// produce the exact ICE-connected/DTLS-failed sequence seen in production.
+	// Meta's offer is authoritative. Do not rewrite a=setup because that changes
+	// the negotiated DTLS role contract.
 	if err := pc.SetRemoteDescription(webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
 		SDP:  sdpOffer,
 	}); err != nil {
-		m.log.Error("Failed to set remote description (consumer offer)", "error", err, "call_id", session.ID)
+		m.log.Error("Failed to set WhatsApp SDP offer", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
+		m.endSession(session, "remote_sdp_failed", "negotiateWebRTC")
 		return
 	}
 
@@ -169,50 +137,56 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	if err != nil {
 		m.log.Error("Failed to create SDP answer", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
+		m.endSession(session, "answer_failed", "negotiateWebRTC")
 		return
 	}
-
 	if err := pc.SetLocalDescription(answer); err != nil {
-		m.log.Error("Failed to set local description (answer)", "error", err, "call_id", session.ID)
+		m.log.Error("Failed to set SDP answer", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
+		m.endSession(session, "local_sdp_failed", "negotiateWebRTC")
 		return
 	}
 
-	localDesc, err := waitForICEGathering(pc, 15*time.Second)
+	localDesc, err := waitForICEGathering(pc, 12*time.Second)
 	if err != nil {
 		m.log.Error("ICE gathering failed", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
+		m.endSession(session, "ice_gather_failed", "negotiateWebRTC")
 		return
 	}
-
 	sdpAnswer := localDesc.SDP
 
-	if abortIfPeerTerminal("before_pre_accept", false) {
-		return
-	}
-
-	// Pre-accept first so ICE/DTLS can establish before audio is emitted.
+	// pre_accept starts early media negotiation. The same answer must later be
+	// supplied to accept.
 	if err := m.whatsapp.PreAcceptCall(ctx, waAccount, session.ID, sdpAnswer); err != nil {
 		m.log.Error("Failed to pre-accept call", "error", err, "call_id", session.ID)
 		m.signalReject(session, waAccount)
-		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
+		m.endSession(session, "pre_accept_failed", "negotiateWebRTC")
 		return
 	}
-	if abortIfPeerTerminal("after_pre_accept", true) {
+	m.log.Info("Call pre-accepted; waiting for secure media before accept", "call_id", session.ID)
+
+	// Media must be connected before final accept. PeerConnectionStateConnected
+	// means ICE + DTLS + SCTP/media transports are established, not merely that
+	// a STUN pair nominated successfully.
+	mediaCtx, mediaCancel := context.WithTimeout(ctx, 12*time.Second)
+	defer mediaCancel()
+	if !waitForPeerConnected(mediaCtx, pc, stateEvents, m, session) {
+		m.log.Error("Secure media did not establish after pre-accept",
+			"call_id", session.ID,
+			"pc_state", pc.ConnectionState().String(),
+			"ice_state", pc.ICEConnectionState().String(),
+		)
+		m.signalTerminate(session, waAccount)
+		m.endSession(session, "media_connect_failed", "negotiateWebRTC")
 		return
 	}
 
-	// Meta requires the exact same SDP answer for accept as pre_accept.
+	m.log.Info("Secure media connected; accepting call", "call_id", session.ID)
 	if err := m.whatsapp.AcceptCall(ctx, waAccount, session.ID, sdpAnswer); err != nil {
-		m.log.Error("Failed to accept call via API", "error", err, "call_id", session.ID)
+		m.log.Error("Failed to accept call", "error", err, "call_id", session.ID)
 		m.terminateCall(session, waAccount)
-		m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
-		return
-	}
-	if abortIfPeerTerminal("after_accept", true) {
+		m.endSession(session, "accept_failed", "negotiateWebRTC")
 		return
 	}
 
@@ -220,54 +194,17 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	session.Status = models.CallStatusAnswered
 	session.mu.Unlock()
 
-	m.log.Info("Call accepted with WebRTC, waiting for media connection", "call_id", session.ID)
-
-	mediaTimer := time.NewTimer(15 * time.Second)
-	defer mediaTimer.Stop()
-	mediaConnected := false
-	for !mediaConnected {
-		select {
-		case <-ctx.Done():
-			m.log.Info("WebRTC negotiation cancelled for stale/ended call", "call_id", session.ID)
-			return
-		case state := <-stateEvents:
-			switch state {
-			case webrtc.PeerConnectionStateConnected:
-				mediaConnected = true
-			case webrtc.PeerConnectionStateFailed:
-				iceState := pc.ICEConnectionState()
-				if iceState == webrtc.ICEConnectionStateConnected || iceState == webrtc.ICEConnectionStateChecking || iceState == webrtc.ICEConnectionStateCompleted {
-					m.log.Info("PeerConnection state changed to failed, but ICE is still active — waiting briefly for DTLS recovery",
-						"call_id", session.ID,
-						"ice_state", iceState.String(),
-					)
-				} else {
-					m.log.Error("WebRTC peer connection failed and ICE is not connected", "call_id", session.ID, "state", state.String(), "ice_state", iceState.String())
-					m.terminateCall(session, waAccount)
-					m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
-					return
-				}
-			case webrtc.PeerConnectionStateClosed:
-				m.log.Error("WebRTC peer closed before media became usable", "call_id", session.ID, "state", state.String())
-				m.terminateCall(session, waAccount)
-				m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
-				return
-			}
-		case <-mediaTimer.C:
-			iceState := pc.ICEConnectionState()
-			m.log.Error("WebRTC media connection timed out", "call_id", session.ID, "ice_state", iceState.String(), "pc_state", pc.ConnectionState().String())
-			m.terminateCall(session, waAccount)
-			m.endSession(session, "webrtc_terminal", "negotiateWebRTC")
-			return
-		}
-	}
-	m.log.Info("WebRTC media connected; starting call media", "call_id", session.ID)
-
-	// No artificial post-connect delay. Once PeerConnectionState is connected,
-	// DTLS-SRTP is ready and the IVR can start immediately, GSM-style.
-	if abortIfPeerTerminal("before_ivr", true) {
+	// Establish a live outbound RTP clock immediately. Three Opus silence frames
+	// cost ~60ms and avoid the first greeting packet being the first media packet
+	// seen by the WhatsApp client.
+	if err := player.Prime(3); err != nil {
+		m.log.Error("Failed to prime IVR RTP stream", "error", err, "call_id", session.ID)
+		m.terminateCall(session, waAccount)
+		m.endSession(session, "media_prime_failed", "negotiateWebRTC")
 		return
 	}
+
+	m.log.Info("Call accepted; realtime IVR media active", "call_id", session.ID)
 
 	if session.StickyAgentID != nil {
 		m.safeGo("initiateTransfer", session.ID, func() {
@@ -277,11 +214,42 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 		m.safeGo("runIVRFlow", session.ID, func() {
 			m.runIVRFlow(session, waAccount)
 		})
+	} else {
+		m.log.Warn("Accepted call has no IVR flow and no sticky agent", "call_id", session.ID)
 	}
 
 	m.safeGo("monitorPeerConnection", session.ID, func() {
 		m.monitorPeerConnection(session, stateEvents, waAccount)
 	})
+}
+
+func waitForPeerConnected(ctx context.Context, pc *webrtc.PeerConnection, stateEvents <-chan webrtc.PeerConnectionState, m *Manager, session *CallSession) bool {
+	if pc.ConnectionState() == webrtc.PeerConnectionStateConnected {
+		return true
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case state := <-stateEvents:
+			switch state {
+			case webrtc.PeerConnectionStateConnected:
+				return true
+			case webrtc.PeerConnectionStateFailed:
+				// A failed PeerConnection with ICE still connected is not usable
+				// media. Do not pretend it recovered merely because STUN succeeded;
+				// give Pion a short opportunity to emit Connected, otherwise the
+				// outer timeout terminates the call cleanly.
+				m.log.Warn("DTLS/media not ready although ICE is active",
+					"call_id", session.ID,
+					"ice_state", pc.ICEConnectionState().String(),
+				)
+			case webrtc.PeerConnectionStateClosed:
+				return false
+			}
+		}
+	}
 }
 
 func (m *Manager) monitorPeerConnection(session *CallSession, stateEvents <-chan webrtc.PeerConnectionState, waAccount *whatsapp.Account) {
@@ -292,7 +260,7 @@ func (m *Manager) monitorPeerConnection(session *CallSession, stateEvents <-chan
 
 	var disconnectTimer *time.Timer
 	var disconnectC <-chan time.Time
-	stopDisconnectTimer := func() {
+	stopTimer := func() {
 		if disconnectTimer == nil {
 			return
 		}
@@ -305,7 +273,7 @@ func (m *Manager) monitorPeerConnection(session *CallSession, stateEvents <-chan
 		disconnectTimer = nil
 		disconnectC = nil
 	}
-	defer stopDisconnectTimer()
+	defer stopTimer()
 
 	for {
 		select {
@@ -315,14 +283,14 @@ func (m *Manager) monitorPeerConnection(session *CallSession, stateEvents <-chan
 			if !m.isCurrentSession(session) {
 				return
 			}
-			m.log.Error("WebRTC peer remained disconnected past grace period", "call_id", session.ID)
+			m.log.Error("WebRTC peer remained unhealthy past grace period", "call_id", session.ID)
 			m.signalTerminate(session, waAccount)
-			m.endSession(session, "peer_disconnected_timeout", "monitorPeerConnection")
+			m.endSession(session, "peer_timeout", "monitorPeerConnection")
 			return
 		case state := <-stateEvents:
 			switch state {
 			case webrtc.PeerConnectionStateConnected:
-				stopDisconnectTimer()
+				stopTimer()
 			case webrtc.PeerConnectionStateDisconnected:
 				if disconnectTimer == nil {
 					disconnectTimer = time.NewTimer(8 * time.Second)
@@ -332,36 +300,14 @@ func (m *Manager) monitorPeerConnection(session *CallSession, stateEvents <-chan
 				if !m.isCurrentSession(session) {
 					return
 				}
-
-				session.mu.Lock()
-				peer := session.PeerConnection
-				session.mu.Unlock()
-				if peer == nil {
-					m.signalTerminate(session, waAccount)
-					m.endSession(session, "peer_failed", "monitorPeerConnection")
-					return
+				if disconnectTimer == nil {
+					disconnectTimer = time.NewTimer(4 * time.Second)
+					disconnectC = disconnectTimer.C
 				}
-
-				iceState := peer.ICEConnectionState()
-				if iceState == webrtc.ICEConnectionStateConnected ||
-					iceState == webrtc.ICEConnectionStateChecking ||
-					iceState == webrtc.ICEConnectionStateCompleted {
-					if disconnectTimer == nil {
-						disconnectTimer = time.NewTimer(6 * time.Second)
-						disconnectC = disconnectTimer.C
-						m.log.Info("PeerConnection failed but ICE still active in monitor — starting grace timer",
-							"call_id", session.ID, "ice_state", iceState.String())
-					}
-					continue
-				}
-				m.signalTerminate(session, waAccount)
-				m.endSession(session, "peer_failed", "monitorPeerConnection")
-				return
 			case webrtc.PeerConnectionStateClosed:
 				if m.isCurrentSession(session) {
-					m.log.Error("Active peer connection closed unexpectedly", "call_id", session.ID)
 					m.signalTerminate(session, waAccount)
-					m.endSession(session, "unexpected_peer_closed", "monitorPeerConnection")
+					m.endSession(session, "peer_closed", "monitorPeerConnection")
 				}
 				return
 			}
@@ -390,27 +336,27 @@ func createOpusTrack(pc *webrtc.PeerConnection, streamID string) (*webrtc.TrackL
 		streamID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create opus track: %w", err)
+		return nil, fmt.Errorf("failed to create Opus track: %w", err)
 	}
 	if _, err := pc.AddTrack(track); err != nil {
-		return nil, fmt.Errorf("failed to add opus track: %w", err)
+		return nil, fmt.Errorf("failed to add Opus track: %w", err)
 	}
 	return track, nil
 }
 
+// createPeerConnection is the generic browser/outgoing-call WebRTC endpoint.
 func (m *Manager) createPeerConnection() (*webrtc.PeerConnection, error) {
 	return m.createPeerConnectionWithAnswerDTLSRole(webrtc.DTLSRoleServer)
 }
 
-// createInboundWhatsAppPeerConnection is used when answering Meta's UIC SDP
-// offer. Meta expects the business endpoint to take the active/client DTLS role.
+// Meta's media side is ICE-LITE. The business media endpoint is ICE-FULL and
+// acts as DTLS client for the inbound/UIC answer path.
 func (m *Manager) createInboundWhatsAppPeerConnection() (*webrtc.PeerConnection, error) {
 	return m.createPeerConnectionWithAnswerDTLSRole(webrtc.DTLSRoleClient)
 }
 
 func (m *Manager) createPeerConnectionWithAnswerDTLSRole(answerDTLSRole webrtc.DTLSRole) (*webrtc.PeerConnection, error) {
-	now := time.Now()
-	iceServers, err := m.resolveICEServers(now)
+	iceServers, err := m.resolveICEServers(time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("resolve ICE servers: %w", err)
 	}
@@ -418,9 +364,9 @@ func (m *Manager) createPeerConnectionWithAnswerDTLSRole(answerDTLSRole webrtc.D
 		return nil, fmt.Errorf("relay_only is enabled but no TURN server is configured")
 	}
 
-	config := webrtc.Configuration{ICEServers: iceServers}
+	cfg := webrtc.Configuration{ICEServers: iceServers}
 	if m.config.RelayOnly {
-		config.ICETransportPolicy = webrtc.ICETransportPolicyRelay
+		cfg.ICETransportPolicy = webrtc.ICETransportPolicyRelay
 	}
 
 	mediaEngine := &webrtc.MediaEngine{}
@@ -432,10 +378,8 @@ func (m *Manager) createPeerConnectionWithAnswerDTLSRole(answerDTLSRole webrtc.D
 		},
 		PayloadType: 111,
 	}, webrtc.RTPCodecTypeAudio); err != nil {
-		return nil, fmt.Errorf("failed to register Opus codec: %w", err)
+		return nil, fmt.Errorf("register Opus codec: %w", err)
 	}
-
-	// Meta's current Calling SDP guidance uses telephone-event PT 126/8000.
 	if err := mediaEngine.RegisterCodec(webrtc.RTPCodecParameters{
 		RTPCodecCapability: webrtc.RTPCodecCapability{
 			MimeType:  "audio/telephone-event",
@@ -443,7 +387,7 @@ func (m *Manager) createPeerConnectionWithAnswerDTLSRole(answerDTLSRole webrtc.D
 		},
 		PayloadType: 126,
 	}, webrtc.RTPCodecTypeAudio); err != nil {
-		return nil, fmt.Errorf("failed to register telephone-event codec: %w", err)
+		return nil, fmt.Errorf("register telephone-event codec: %w", err)
 	}
 
 	settingEngine := webrtc.SettingEngine{}
@@ -456,9 +400,12 @@ func (m *Manager) createPeerConnectionWithAnswerDTLSRole(answerDTLSRole webrtc.D
 		portMax = 10999
 	}
 	if err := settingEngine.SetEphemeralUDPPortRange(portMin, portMax); err != nil {
-		return nil, fmt.Errorf("failed to set UDP port range: %w", err)
+		return nil, fmt.Errorf("set UDP port range: %w", err)
 	}
 
+	// Keep explicit ownership of peer teardown. A transient DTLS close callback
+	// must not tear down the whole application-level call session underneath the
+	// lifecycle manager.
 	settingEngine.DisableCloseByDTLS(true)
 	settingEngine.SetAnsweringDTLSRole(answerDTLSRole)
 
@@ -467,7 +414,7 @@ func (m *Manager) createPeerConnectionWithAnswerDTLSRole(answerDTLSRole webrtc.D
 			External:        []string{m.config.PublicIP},
 			AsCandidateType: webrtc.ICECandidateTypeHost,
 		}); err != nil {
-			return nil, fmt.Errorf("failed to set ICE address rewrite rules: %w", err)
+			return nil, fmt.Errorf("set ICE address rewrite rules: %w", err)
 		}
 	}
 
@@ -475,15 +422,14 @@ func (m *Manager) createPeerConnectionWithAnswerDTLSRole(answerDTLSRole webrtc.D
 		webrtc.WithMediaEngine(mediaEngine),
 		webrtc.WithSettingEngine(settingEngine),
 	)
-
-	pc, err := api.NewPeerConnection(config)
+	pc, err := api.NewPeerConnection(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
 		if c == nil {
-			m.log.Info("ICE gathering complete (no more candidates)")
+			m.log.Info("ICE gathering complete")
 			return
 		}
 		m.log.Info("ICE candidate gathered",
@@ -496,21 +442,22 @@ func (m *Manager) createPeerConnectionWithAnswerDTLSRole(answerDTLSRole webrtc.D
 	})
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		m.log.Info("ICE connection state changed", "state", state.String())
-		if state == webrtc.ICEConnectionStateConnected {
-			go func() {
-				for _, s := range pc.GetStats() {
-					pair, ok := s.(webrtc.ICECandidatePairStats)
-					if !ok || !pair.Nominated {
-						continue
-					}
-					m.log.Info("Selected ICE candidate pair",
-						"state", pair.State,
-						"local_candidate_id", pair.LocalCandidateID,
-						"remote_candidate_id", pair.RemoteCandidateID,
-					)
-				}
-			}()
+		if state != webrtc.ICEConnectionStateConnected && state != webrtc.ICEConnectionStateCompleted {
+			return
 		}
+		go func() {
+			for _, s := range pc.GetStats() {
+				pair, ok := s.(webrtc.ICECandidatePairStats)
+				if !ok || !pair.Nominated {
+					continue
+				}
+				m.log.Info("Selected ICE candidate pair",
+					"state", pair.State,
+					"local_candidate_id", pair.LocalCandidateID,
+					"remote_candidate_id", pair.RemoteCandidateID,
+				)
+			}
+		}()
 	})
 
 	return pc, nil
@@ -525,9 +472,7 @@ func (m *Manager) consumeAudioTrack(session *CallSession, track *webrtc.TrackRem
 			return
 		default:
 		}
-
-		_, _, err := track.Read(buf)
-		if err != nil {
+		if _, _, err := track.Read(buf); err != nil {
 			return
 		}
 	}
@@ -540,11 +485,6 @@ func (m *Manager) consumeAudioWithDTMF(session *CallSession, track *webrtc.Track
 	var lastEndBit bool
 	packetCount := 0
 
-	m.log.Info("Consuming audio with inline DTMF detection",
-		"call_id", session.ID,
-		"audio_pt", audioPT,
-	)
-
 	for {
 		select {
 		case <-session.BridgeStarted:
@@ -554,37 +494,19 @@ func (m *Manager) consumeAudioWithDTMF(session *CallSession, track *webrtc.Track
 
 		pkt, _, err := track.ReadRTP()
 		if err != nil {
-			m.log.Debug("Audio track read ended", "call_id", session.ID, "error", err)
 			return
 		}
-
 		packetCount++
-		if pkt.PayloadType != uint8(audioPT) {
-			m.log.Info("Non-audio RTP packet received",
-				"call_id", session.ID,
-				"payload_type", pkt.PayloadType,
-				"payload_len", len(pkt.Payload),
-				"audio_pt", audioPT,
-			)
 
-			if len(pkt.Payload) >= 4 {
-				eventID := pkt.Payload[0]
-				endBit := (pkt.Payload[1] & 0x80) != 0
-
-				if digit, ok := decodeDTMFEvent(eventID, endBit, &lastDTMFEvent, &lastEndBit); ok {
-					m.log.Info("DTMF digit detected (inline)",
-						"call_id", session.ID,
-						"digit", string(digit),
-						"event_id", eventID,
-					)
-					sendDTMFDigit(session, digit, m.log)
-				}
+		if pkt.PayloadType != uint8(audioPT) && len(pkt.Payload) >= 4 {
+			eventID := pkt.Payload[0]
+			endBit := (pkt.Payload[1] & 0x80) != 0
+			if digit, ok := decodeDTMFEvent(eventID, endBit, &lastDTMFEvent, &lastEndBit); ok {
+				m.log.Info("DTMF digit detected", "call_id", session.ID, "digit", string(digit), "event_id", eventID)
+				sendDTMFDigit(session, digit, m.log)
 			}
 		} else if packetCount == 1 {
-			m.log.Debug("First audio packet received",
-				"call_id", session.ID,
-				"payload_type", pkt.PayloadType,
-			)
+			m.log.Debug("First WhatsApp audio packet received", "call_id", session.ID, "payload_type", pkt.PayloadType)
 		}
 	}
 }
