@@ -263,8 +263,10 @@ func (a *App) GetCallPermission(r *fastglue.Request) error {
 	ctx := r.RequestCtx
 	status, err := a.WhatsApp.GetCallPermission(ctx, waAccount, contact.PhoneNumber)
 	if err != nil {
-		a.Log.Error("Failed to check call permission via API", "error", err, "phone", contact.PhoneNumber)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to check permission", nil, "")
+		a.Log.Debug("Call permission check API error or no permission record, defaulting to no_permission", "error", err, "phone", contact.PhoneNumber)
+		return r.SendEnvelope(map[string]string{
+			"status": "no_permission",
+		})
 	}
 
 	a.Log.Info("Call permission check result", "contact_id", contactID, "phone", contact.PhoneNumber, "status", status)

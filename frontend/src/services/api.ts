@@ -1198,7 +1198,7 @@ export const outgoingCallsService = {
   requestPermission: (data: { contact_id: string; whatsapp_account: string; method?: 'interactive' | 'template' }) =>
     api.post<{ permission_id: string }>('/calls/permission-request', data),
   getPermission: (contactId: string, whatsappAccount: string) =>
-    api.get<CallPermission>(`/calls/permission/${contactId}`, { params: { whatsapp_account: whatsappAccount } }),
+    api.get<CallPermission>(`/calls/permission-check/${contactId}`, { params: { whatsapp_account: whatsappAccount } }),
   getICEServers: () =>
     api.get<{ ice_servers: Array<{ urls: string[]; username?: string; credential?: string }> }>('/calls/ice-servers'),
 }
