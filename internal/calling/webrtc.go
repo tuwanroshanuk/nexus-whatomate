@@ -77,8 +77,6 @@ func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsApp
 	ctx, cancel := context.WithTimeout(baseCtx, 30*time.Second)
 	defer cancel()
 
-	// Decrypt access token before use — the model stores it encrypted at rest.
-	account.DecryptSecrets(m.encryptionKey)
 	waAccount := account.ToWAAccount()
 
 	// Create peer connection with Opus codec
