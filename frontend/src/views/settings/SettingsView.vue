@@ -12,9 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PageHeader, AuditLogPanel } from '@/components/shared'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import { toast } from 'vue-sonner'
-import { Settings, Bell, Loader2, Globe, Phone, Upload, Play, Pause, Music } from 'lucide-vue-next'
+import { Settings, Bell, Loader2, Globe, Phone, Upload, Play, Pause, Music, Volume2, Square } from 'lucide-vue-next'
 import { usersService, organizationService } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
+import { getSelectedRingtone, setSelectedRingtone, RINGTONE_STORAGE_KEY, DEFAULT_RINGTONE } from '@/services/websocket'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -69,6 +70,168 @@ const holdMusicAudio = ref<HTMLAudioElement | null>(null)
 const ringbackAudio = ref<HTMLAudioElement | null>(null)
 const playingHoldMusic = ref(false)
 const playingRingback = ref(false)
+
+// ── Ringtone picker ──────────────────────────────────────────────────────────
+// Each built-in ringtone is generated via the Web Audio API so no static audio
+// files are needed. The generator returns a Blob object URL that is played for
+// preview and optionally saved to localStorage.
+
+interface RingtoneOption {
+  id: string
+  label: string
+  generate: (ctx: AudioContext) => void
+}
+
+const BUILTIN_RINGTONES: RingtoneOption[] = [
+  {
+    id: 'default',
+    label: 'Default (notification)',
+    generate: (ctx) => {
+      // Two-tone ding: 880Hz + 1108Hz
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(0, ctx.currentTime)
+      gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.01)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6)
+      gain.connect(ctx.destination)
+      for (const freq of [880, 1108]) {
+        const osc = ctx.createOscillator()
+        osc.type = 'sine'
+        osc.frequency.value = freq
+        osc.connect(gain)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.6)
+      }
+    }
+  },
+  {
+    id: 'classic',
+    label: 'Classic Ring',
+    generate: (ctx) => {
+      // Repeating 440Hz / 480Hz dual-tone ring (PSTN-style), 3 bursts
+      let t = ctx.currentTime
+      for (let i = 0; i < 3; i++) {
+        const gain = ctx.createGain()
+        gain.gain.setValueAtTime(0.35, t)
+        gain.gain.setValueAtTime(0, t + 0.4)
+        gain.connect(ctx.destination)
+        for (const freq of [440, 480]) {
+          const osc = ctx.createOscillator()
+          osc.type = 'square'
+          osc.frequency.value = freq
+          osc.connect(gain)
+          osc.start(t)
+          osc.stop(t + 0.4)
+        }
+        t += 0.6
+      }
+    }
+  },
+  {
+    id: 'digital',
+    label: 'Digital Pulse',
+    generate: (ctx) => {
+      let t = ctx.currentTime
+      for (let i = 0; i < 4; i++) {
+        const gain = ctx.createGain()
+        gain.gain.setValueAtTime(0.3, t)
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15)
+        gain.connect(ctx.destination)
+        const osc = ctx.createOscillator()
+        osc.type = 'sawtooth'
+        osc.frequency.setValueAtTime(1200, t)
+        osc.frequency.exponentialRampToValueAtTime(800, t + 0.15)
+        osc.connect(gain)
+        osc.start(t)
+        osc.stop(t + 0.15)
+        t += 0.22
+      }
+    }
+  },
+  {
+    id: 'soft',
+    label: 'Soft Chime',
+    generate: (ctx) => {
+      const freqs = [523.25, 659.25, 783.99, 1046.5] // C5 E5 G5 C6
+      let t = ctx.currentTime
+      for (const freq of freqs) {
+        const gain = ctx.createGain()
+        gain.gain.setValueAtTime(0, t)
+        gain.gain.linearRampToValueAtTime(0.35, t + 0.02)
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5)
+        gain.connect(ctx.destination)
+        const osc = ctx.createOscillator()
+        osc.type = 'sine'
+        osc.frequency.value = freq
+        osc.connect(gain)
+        osc.start(t)
+        osc.stop(t + 0.5)
+        t += 0.18
+      }
+    }
+  },
+  {
+    id: 'urgent',
+    label: 'Urgent Alert',
+    generate: (ctx) => {
+      let t = ctx.currentTime
+      for (let i = 0; i < 6; i++) {
+        const gain = ctx.createGain()
+        gain.gain.setValueAtTime(0.45, t)
+        gain.gain.setValueAtTime(0, t + 0.08)
+        gain.connect(ctx.destination)
+        const osc = ctx.createOscillator()
+        osc.type = 'square'
+        osc.frequency.value = i % 2 === 0 ? 900 : 1100
+        osc.connect(gain)
+        osc.start(t)
+        osc.stop(t + 0.08)
+        t += 0.12
+      }
+    }
+  }
+]
+
+// Selected ringtone id (from localStorage or 'default')
+function getRingtoneIdFromStorage(): string {
+  const stored = localStorage.getItem(RINGTONE_STORAGE_KEY)
+  if (!stored || stored === DEFAULT_RINGTONE) return 'default'
+  return stored.startsWith('__ringtone__') ? stored.replace('__ringtone__', '') : 'default'
+}
+
+const selectedRingtoneId = ref<string>(getRingtoneIdFromStorage())
+let previewAudioCtx: AudioContext | null = null
+const isPreviewingRingtone = ref(false)
+
+function stopRingtonePreview() {
+  if (previewAudioCtx) {
+    previewAudioCtx.close()
+    previewAudioCtx = null
+  }
+  isPreviewingRingtone.value = false
+}
+
+function previewRingtone(id: string) {
+  stopRingtonePreview()
+  const option = BUILTIN_RINGTONES.find(r => r.id === id)
+  if (!option) return
+  previewAudioCtx = new AudioContext()
+  option.generate(previewAudioCtx)
+  isPreviewingRingtone.value = true
+  // Auto-stop after 2.5s
+  setTimeout(() => {
+    if (isPreviewingRingtone.value) stopRingtonePreview()
+  }, 2500)
+}
+
+function saveRingtone() {
+  const key = selectedRingtoneId.value === 'default'
+    ? DEFAULT_RINGTONE
+    : `__ringtone__${selectedRingtoneId.value}`
+  setSelectedRingtone(key)
+  toast.success('Ringtone saved')
+}
+// ── End ringtone picker ──────────────────────────────────────────────────────
+
 
 // Bump these keys to force the AuditLogPanel to remount and refetch after a save.
 // The backend writes audit entries asynchronously in a goroutine, so we delay
@@ -431,6 +594,85 @@ function togglePlayAudio(type: 'hold_music' | 'ringback') {
                 </div>
               </div>
             </div>
+
+            <!-- Incoming Call Ringtone Card -->
+            <div class="mt-6 rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200 overflow-hidden">
+              <div class="p-6 pb-4">
+                <div class="flex items-center gap-3 mb-1">
+                  <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500/20 to-purple-600/20 border border-violet-500/20 flex items-center justify-center">
+                    <Volume2 class="h-4 w-4 text-violet-400" />
+                  </div>
+                  <div>
+                    <h3 class="text-base font-semibold text-white light:text-gray-900">Incoming Call Ringtone</h3>
+                    <p class="text-sm text-white/40 light:text-gray-500">Choose the sound played when a call comes in</p>
+                  </div>
+                </div>
+              </div>
+              <div class="px-6 pb-6 space-y-4">
+                <!-- Ringtone grid -->
+                <div class="grid grid-cols-1 gap-2">
+                  <div
+                    v-for="ringtone in BUILTIN_RINGTONES"
+                    :key="ringtone.id"
+                    :id="`ringtone-option-${ringtone.id}`"
+                    class="flex items-center justify-between px-4 py-3 rounded-lg border cursor-pointer transition-all duration-150"
+                    :class="selectedRingtoneId === ringtone.id
+                      ? 'border-violet-500/60 bg-violet-500/10 shadow-sm shadow-violet-500/10'
+                      : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04] light:border-gray-200 light:bg-white light:hover:bg-gray-50'"
+                    @click="selectedRingtoneId = ringtone.id"
+                  >
+                    <div class="flex items-center gap-3">
+                      <!-- Radio dot -->
+                      <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors"
+                        :class="selectedRingtoneId === ringtone.id
+                          ? 'border-violet-500'
+                          : 'border-white/30 light:border-gray-300'"
+                      >
+                        <div v-if="selectedRingtoneId === ringtone.id"
+                          class="w-2 h-2 rounded-full bg-violet-500"
+                        />
+                      </div>
+                      <div>
+                        <p class="text-sm font-medium"
+                          :class="selectedRingtoneId === ringtone.id ? 'text-violet-300 light:text-violet-700' : 'text-white/80 light:text-gray-700'">
+                          {{ ringtone.label }}
+                        </p>
+                      </div>
+                    </div>
+                    <!-- Preview button -->
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="h-8 px-3 text-xs gap-1.5 transition-colors"
+                      :class="selectedRingtoneId === ringtone.id
+                        ? 'text-violet-400 hover:text-violet-300 hover:bg-violet-500/10'
+                        : 'text-white/40 hover:text-white/70 hover:bg-white/[0.06]'"
+                      @click.stop="isPreviewingRingtone ? stopRingtonePreview() : previewRingtone(ringtone.id)"
+                    >
+                      <Square v-if="isPreviewingRingtone" class="h-3 w-3 fill-current" />
+                      <Play v-else class="h-3 w-3" />
+                      {{ isPreviewingRingtone ? 'Stop' : 'Preview' }}
+                    </Button>
+                  </div>
+                </div>
+
+                <!-- Save row -->
+                <div class="flex items-center justify-between pt-2">
+                  <p class="text-xs text-white/30 light:text-gray-400">
+                    Saved per-browser. Other agents keep their own preference.
+                  </p>
+                  <Button
+                    id="save-ringtone-btn"
+                    size="sm"
+                    class="bg-violet-600 hover:bg-violet-500 text-white border-0 shadow-lg shadow-violet-500/20 transition-all"
+                    @click="saveRingtone"
+                  >
+                    Save Ringtone
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div v-if="userID" class="mt-4">
               <AuditLogPanel :key="notificationLogKey" resource-type="settings.notification" :resource-id="userID" />
             </div>

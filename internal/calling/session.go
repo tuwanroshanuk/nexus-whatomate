@@ -147,6 +147,16 @@ type Manager struct {
 	s3       *storage.S3Client // nil when recording is disabled
 	redis    *redis.Client
 	assigner *assignment.Assigner
+
+	// callerCooldowns tracks the timestamp of the last session teardown per caller
+	// phone number. When a caller redials immediately after a failed call, the
+	// previous TURN relay allocation may still be live on Meta's side, causing
+	// the next DTLS handshake to be rejected (PeerConnectionState→failed in <100ms).
+	// A short cooldown before starting ICE gathering on the new call gives Meta's
+	// infrastructure time to fully release the old allocation — mirroring the
+	// guard-timer semantics of GSM channel release.
+	callerCooldowns map[string]time.Time
+	cooldownMu      sync.Mutex
 }
 
 // NewManager creates a new call session manager
@@ -170,15 +180,16 @@ func NewManager(cfg *config.CallingConfig, s3Client *storage.S3Client, db *gorm.
 	}
 
 	return &Manager{
-		sessions: make(map[string]*CallSession),
-		log:      log,
-		whatsapp: waClient,
-		db:       db,
-		redis:    rd,
-		wsHub:    wsHub,
-		config:   cfg,
-		s3:       s3Client,
-		assigner: assigner,
+		sessions:        make(map[string]*CallSession),
+		callerCooldowns: make(map[string]time.Time),
+		log:             log,
+		whatsapp:        waClient,
+		db:              db,
+		redis:           rd,
+		wsHub:           wsHub,
+		config:          cfg,
+		s3:              s3Client,
+		assigner:        assigner,
 	}
 }
 
@@ -237,8 +248,11 @@ func (m *Manager) HandleIncomingCall(account *models.WhatsAppAccount, contact *m
 	)
 
 	// Start WebRTC negotiation using the consumer's SDP offer.
+	// Pass callerPhone into the closure so the goroutine can apply a per-caller
+	// ICE cooldown (see negotiateWebRTC) without blocking this webhook handler.
+	callerPhone := contact.PhoneNumber
 	m.safeGo("negotiateWebRTC", session.ID, func() {
-		m.negotiateWebRTC(session, account, sdpOffer)
+		m.negotiateWebRTC(session, account, sdpOffer, callerPhone)
 	})
 }
 
@@ -423,6 +437,7 @@ func (m *Manager) cleanupSession(callID string) {
 	transferStatus := session.TransferStatus
 	callLogID := session.CallLogID
 	orgID := session.OrganizationID
+	callerPhone := session.CallerPhone // captured for cooldown recording below
 
 	if transferID != uuid.Nil && transferStatus == models.CallTransferStatusWaiting {
 		session.TransferStatus = models.CallTransferStatusAbandoned
@@ -525,6 +540,15 @@ func (m *Manager) cleanupSession(callID string) {
 	// Finalize recording (async — don't block cleanup)
 	if callerRec != nil || agentRec != nil {
 		go m.finalizeRecording(orgID, callLogID, callerRec, agentRec)
+	}
+
+	// Record teardown timestamp for this caller. negotiateWebRTC reads this to
+	// apply a brief ICE cooldown on rapid redial, preventing DTLS failures
+	// caused by a stale TURN relay allocation still live on Meta's side.
+	if callerPhone != "" {
+		m.cooldownMu.Lock()
+		m.callerCooldowns[callerPhone] = time.Now()
+		m.cooldownMu.Unlock()
 	}
 
 	m.log.Info("Call session cleaned up", "call_id", callID)

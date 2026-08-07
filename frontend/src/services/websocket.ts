@@ -7,19 +7,149 @@ import { contactsService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import router from '@/router'
 
-// Notification sound
+// Notification / ringtone sound
+// Source is read from localStorage on every play so ringtone changes take effect
+// immediately without requiring a page reload.
 let notificationSound: HTMLAudioElement | null = null
+let notificationSoundSrc = ''
+
+export const RINGTONE_STORAGE_KEY = 'incoming_call_ringtone'
+export const DEFAULT_RINGTONE = '/notification.mp3'
+
+export function getSelectedRingtone(): string {
+  return localStorage.getItem(RINGTONE_STORAGE_KEY) || DEFAULT_RINGTONE
+}
+
+export function setSelectedRingtone(src: string) {
+  localStorage.setItem(RINGTONE_STORAGE_KEY, src)
+  // Reset cached audio element so it reloads with the new source on next play
+  if (notificationSound) {
+    notificationSound.pause()
+    notificationSound = null
+    notificationSoundSrc = ''
+  }
+}
+
+// Generators for built-in synthesized ringtones (keyed by id, matching BUILTIN_RINGTONES in SettingsView)
+const RINGTONE_GENERATORS: Record<string, (ctx: AudioContext) => void> = {
+  default: (ctx) => {
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0, ctx.currentTime)
+    gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.01)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6)
+    gain.connect(ctx.destination)
+    for (const freq of [880, 1108]) {
+      const osc = ctx.createOscillator()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      osc.connect(gain)
+      osc.start(ctx.currentTime)
+      osc.stop(ctx.currentTime + 0.6)
+    }
+  },
+  classic: (ctx) => {
+    let t = ctx.currentTime
+    for (let i = 0; i < 3; i++) {
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(0.35, t)
+      gain.gain.setValueAtTime(0, t + 0.4)
+      gain.connect(ctx.destination)
+      for (const freq of [440, 480]) {
+        const osc = ctx.createOscillator()
+        osc.type = 'square'
+        osc.frequency.value = freq
+        osc.connect(gain)
+        osc.start(t)
+        osc.stop(t + 0.4)
+      }
+      t += 0.6
+    }
+  },
+  digital: (ctx) => {
+    let t = ctx.currentTime
+    for (let i = 0; i < 4; i++) {
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(0.3, t)
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15)
+      gain.connect(ctx.destination)
+      const osc = ctx.createOscillator()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(1200, t)
+      osc.frequency.exponentialRampToValueAtTime(800, t + 0.15)
+      osc.connect(gain)
+      osc.start(t)
+      osc.stop(t + 0.15)
+      t += 0.22
+    }
+  },
+  soft: (ctx) => {
+    const freqs = [523.25, 659.25, 783.99, 1046.5]
+    let t = ctx.currentTime
+    for (const freq of freqs) {
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(0, t)
+      gain.gain.linearRampToValueAtTime(0.35, t + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5)
+      gain.connect(ctx.destination)
+      const osc = ctx.createOscillator()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      osc.connect(gain)
+      osc.start(t)
+      osc.stop(t + 0.5)
+      t += 0.18
+    }
+  },
+  urgent: (ctx) => {
+    let t = ctx.currentTime
+    for (let i = 0; i < 6; i++) {
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(0.45, t)
+      gain.gain.setValueAtTime(0, t + 0.08)
+      gain.connect(ctx.destination)
+      const osc = ctx.createOscillator()
+      osc.type = 'square'
+      osc.frequency.value = i % 2 === 0 ? 900 : 1100
+      osc.connect(gain)
+      osc.start(t)
+      osc.stop(t + 0.08)
+      t += 0.12
+    }
+  }
+}
 
 function playNotificationSound() {
-  if (!notificationSound) {
-    notificationSound = new Audio('/notification.mp3')
-    notificationSound.volume = 0.5
+  const src = getSelectedRingtone()
+
+  // Synthesized built-in ringtone — generated via Web Audio API (no files needed)
+  if (src.startsWith('__ringtone__')) {
+    const id = src.replace('__ringtone__', '')
+    const generator = RINGTONE_GENERATORS[id] ?? RINGTONE_GENERATORS['default']
+    try {
+      const ctx = new AudioContext()
+      generator(ctx)
+      // Auto-close after 3s to free resources
+      setTimeout(() => ctx.close().catch(() => {}), 3000)
+    } catch {
+      // AudioContext not available (e.g. headless test env) — silently skip
+    }
+    return
+  }
+
+  // File-based ringtone (default notification.mp3 or custom URL)
+  // Re-create the element only when the source changes, to avoid re-decoding
+  // the same audio on every call notification.
+  if (!notificationSound || notificationSoundSrc !== src) {
+    notificationSound = new Audio(src)
+    notificationSound.volume = 0.7
+    notificationSoundSrc = src
   }
   notificationSound.currentTime = 0
   notificationSound.play().catch(() => {
     // Ignore autoplay errors (browser may block until user interaction)
   })
 }
+
 
 // Show toast notification with click handler
 function showNotification(title: string, body: string, contactId: string) {

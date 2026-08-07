@@ -19,16 +19,60 @@ import (
 //  4. Business sends pre_accept with session: { sdp_type: "answer", sdp: "<SDP>" }
 //  5. Business sends accept with the same session object
 //  6. WebRTC media flows
-func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsAppAccount, sdpOffer string) {
+//
+// callerPhone is the E.164 phone number of the caller, used to apply a
+// per-caller ICE cooldown on rapid redial (see callerCooldowns in session.go).
+func (m *Manager) negotiateWebRTC(session *CallSession, account *models.WhatsAppAccount, sdpOffer string, callerPhone string) {
 	// A panic anywhere below (a bad SDP, an unexpected nil, a pion internal
 	// edge case) must end this one call, not the whole process — every other
 	// active call and every future incoming call has to keep working.
 	defer m.recoverAndLog("negotiateWebRTC", session.ID)
 
+	// Per-caller ICE cooldown: if this caller ended a session very recently
+	// (rapid redial), Meta's TURN relay may still hold the old allocation.
+	// A new DTLS handshake on the same allocation arrives as a conflict and
+	// Meta's media server sends a fatal DTLS alert — Pion records
+	// PeerConnectionState=failed within ~100ms of the accept, with the ICE
+	// pair already selected (host or relay). Sleeping the remainder of a 350ms
+	// guard window gives Meta's infrastructure time to fully release the
+	// old allocation before we begin ICE gathering on the new call.
+	// This mirrors the channel-release guard timer used in GSM (T3105/T3120).
+	const callerCooldownWindow = 350 * time.Millisecond
+	if callerPhone != "" {
+		m.cooldownMu.Lock()
+		if last, ok := m.callerCooldowns[callerPhone]; ok {
+			elapsed := time.Since(last)
+			if elapsed < callerCooldownWindow {
+				remaining := callerCooldownWindow - elapsed
+				m.cooldownMu.Unlock()
+				m.log.Info("Applying per-caller ICE cooldown before negotiation",
+					"call_id", session.ID,
+					"caller", callerPhone,
+					"sleep_ms", remaining.Milliseconds(),
+				)
+				time.Sleep(remaining)
+			} else {
+				m.cooldownMu.Unlock()
+			}
+		} else {
+			m.cooldownMu.Unlock()
+		}
+	}
+
+	// Set up the session context. The done-check here catches two cases:
+	// 1. The caller hung up before the negotiateWebRTC goroutine started.
+	// 2. The caller hung up during the cooldown sleep above.
+	// Either way, bail before allocating any WebRTC resources.
 	baseCtx := session.Context
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
+	select {
+	case <-baseCtx.Done():
+		return
+	default:
+	}
+
 	ctx, cancel := context.WithTimeout(baseCtx, 30*time.Second)
 	defer cancel()
 
