@@ -293,7 +293,7 @@ func (m *Manager) executeMenu(session *CallSession, node *IVRNode, ctx *IVRConte
 			select {
 			case <-playDone:
 				// Audio finished playing, wait for digit input
-				digit, gotDigit = m.waitForDTMF(session, timeout, 1)
+				digit, gotDigit = m.waitForDTMF(session, player, timeout, 1)
 			case d, chOk := <-session.DTMFBuffer:
 				// Caller interrupted audio with a digit
 				player.Stop()
@@ -305,7 +305,7 @@ func (m *Manager) executeMenu(session *CallSession, node *IVRNode, ctx *IVRConte
 				}
 			}
 		} else {
-			digit, gotDigit = m.waitForDTMF(session, timeout, 1)
+			digit, gotDigit = m.waitForDTMF(session, player, timeout, 1)
 		}
 
 		if !gotDigit {
@@ -352,7 +352,7 @@ func (m *Manager) executeGather(session *CallSession, node *IVRNode, ctx *IVRCon
 
 	// Collect digits
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		collected := m.collectDTMFDigits(session, maxDigits, terminator, time.Duration(timeoutSecs)*time.Second)
+		collected := m.collectDTMFDigits(session, player, maxDigits, terminator, time.Duration(timeoutSecs)*time.Second)
 		if collected != "" {
 			if storeAs != "" {
 				ctx.Variables[storeAs] = collected
@@ -366,10 +366,29 @@ func (m *Manager) executeGather(session *CallSession, node *IVRNode, ctx *IVRCon
 	return "max_retries"
 }
 
-// collectDTMFDigits collects multiple digits until maxDigits, terminator, or timeout.
-func (m *Manager) collectDTMFDigits(session *CallSession, maxDigits int, terminator string, timeout time.Duration) string {
+// collectDTMFDigits collects multiple digits until maxDigits, terminator, or
+// timeout. Like waitForDTMF, it keeps the outbound RTP stream alive with
+// silence for the duration of the collection window and returns immediately
+// if the session is cancelled (hangup) instead of blocking until timeout.
+func (m *Manager) collectDTMFDigits(session *CallSession, player *AudioPlayer, maxDigits int, terminator string, timeout time.Duration) string {
 	var digits []byte
 	deadline := time.After(timeout)
+
+	var done <-chan struct{}
+	if session.Context != nil {
+		done = session.Context.Done()
+	}
+
+	silenceDone := make(chan struct{})
+	go func() {
+		player.PlaySilence(timeout)
+		close(silenceDone)
+	}()
+	defer func() {
+		player.Stop()
+		<-silenceDone
+		player.ResetAfterInterrupt()
+	}()
 
 	for len(digits) < maxDigits {
 		select {
@@ -381,6 +400,8 @@ func (m *Manager) collectDTMFDigits(session *CallSession, maxDigits int, termina
 				return string(digits)
 			}
 			digits = append(digits, d)
+		case <-done:
+			return string(digits)
 		case <-deadline:
 			return string(digits)
 		}
@@ -639,15 +660,50 @@ func (m *Manager) drainDTMF(session *CallSession) {
 }
 
 // waitForDTMF waits for a DTMF digit with timeout and retries.
-func (m *Manager) waitForDTMF(session *CallSession, timeout time.Duration, maxRetries int) (byte, bool) {
+//
+// While waiting it keeps the outbound RTP stream alive with silence packets
+// via player.PlaySilence. Without this, a caller sitting idle at a menu
+// produces zero outbound RTP packets for the whole timeout window (up to
+// several retries' worth), and calls have been observed to be torn down
+// mid-wait even though the caller never hung up — consistent with
+// WhatsApp/Meta's calling backend treating a prolonged gap in outbound
+// media as a dead call. PlaySilence already existed in this codebase for
+// exactly this purpose but was never wired into the DTMF wait path.
+//
+// It also watches session.Context so that a hangup (or any other path that
+// cancels the session) interrupts the wait immediately instead of blocking
+// executeNodeLoop for up to timeout*maxRetries after the call has already
+// ended — previously observed as a ~30s-late "No matching edge, ending call
+// cleanly" long after the caller had already hung up, during which the
+// lingering goroutine could still be touching session/DB/WhatsApp-API state
+// that a fresh redial from the same caller was concurrently trying to use.
+func (m *Manager) waitForDTMF(session *CallSession, player *AudioPlayer, timeout time.Duration, maxRetries int) (byte, bool) {
+	var done <-chan struct{}
+	if session.Context != nil {
+		done = session.Context.Done()
+	}
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
+		silenceDone := make(chan struct{})
+		go func() {
+			player.PlaySilence(timeout)
+			close(silenceDone)
+		}()
+
 		select {
 		case digit, ok := <-session.DTMFBuffer:
+			player.Stop()
+			<-silenceDone
+			player.ResetAfterInterrupt()
 			if !ok {
 				return 0, false
 			}
 			return digit, true
-		case <-time.After(timeout):
+		case <-done:
+			player.Stop()
+			<-silenceDone
+			return 0, false
+		case <-silenceDone:
 			m.log.Debug("DTMF timeout", "call_id", session.ID, "attempt", attempt+1)
 		}
 	}
