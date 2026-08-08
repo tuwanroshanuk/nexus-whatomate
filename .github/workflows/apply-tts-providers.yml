@@ -23,8 +23,14 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Apply provider implementation
+      - name: Apply base provider implementation
         run: python .github/scripts/apply_tts_providers.py
+      - name: Normalize generated Go before Cloud extension
+        run: gofmt -w internal/tts/piper.go internal/tts/providers.go internal/handlers/tts_settings.go internal/handlers/tts_providers.go cmd/whatomate/main.go
+      - name: Add Google Cloud TTS voice tiers
+        run: python .github/scripts/extend_tts_google_cloud.py
+      - name: Add primary-language UX
+        run: python .github/scripts/refine_tts_primary_languages.py
       - name: Format Go
         run: gofmt -w internal/tts/piper.go internal/tts/providers.go internal/handlers/tts_settings.go internal/handlers/tts_providers.go cmd/whatomate/main.go
       - name: Test backend
@@ -49,9 +55,9 @@ jobs:
         run: npm run build
       - name: Commit implementation
         run: |
-          rm -f .github/scripts/apply_tts_providers.py .github/workflows/apply-tts-providers.yml
+          rm -f .github/scripts/apply_tts_providers.py .github/scripts/extend_tts_google_cloud.py .github/scripts/refine_tts_primary_languages.py .github/workflows/apply-tts-providers.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Add switchable local and Gemini TTS providers"
+          git commit -m "Add local, Google Cloud and Gemini TTS providers"
           git push origin HEAD:main
