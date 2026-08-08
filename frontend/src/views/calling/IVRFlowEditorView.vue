@@ -115,7 +115,7 @@ function addNodeFromPalette(type: IVRNodeType) {
     greeting: { audio_file: '', interruptible: false },
     menu: { audio_file: '', timeout_seconds: 10, max_retries: 3, options: {} },
     gather: { audio_file: '', max_digits: 10, terminator: '#', timeout_seconds: 10, max_retries: 3, store_as: '' },
-    http_callback: { url: '', method: 'GET', headers: {}, body_template: '', timeout_seconds: 10 },
+    http_callback: { url: '', method: 'GET', headers: {}, body_template: '', timeout_seconds: 10, progress_audio_file: '' },
     transfer: { team_id: '' },
     goto_flow: { flow_id: '' },
     timing: { schedule: [

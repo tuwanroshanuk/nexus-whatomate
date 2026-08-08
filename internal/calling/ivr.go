@@ -150,7 +150,7 @@ func (m *Manager) executeNodeLoop(session *CallSession, waAccount *whatsapp.Acco
 		case IVRNodeGather:
 			outcome = m.executeGather(session, node, ctx, player)
 		case IVRNodeHTTPCallback:
-			outcome = m.executeHTTPCallback(session, node, ctx)
+			outcome = m.executeHTTPCallback(session, node, ctx, player)
 		case IVRNodeTransfer:
 			ctx.Path = append(ctx.Path, map[string]string{
 				"node": node.ID, "type": string(node.Type), "label": node.Label,
@@ -410,7 +410,7 @@ func (m *Manager) collectDTMFDigits(session *CallSession, player *AudioPlayer, m
 }
 
 // executeHTTPCallback makes an HTTP request and branches on response status.
-func (m *Manager) executeHTTPCallback(session *CallSession, node *IVRNode, ctx *IVRContext) string {
+func (m *Manager) executeHTTPCallback(session *CallSession, node *IVRNode, ctx *IVRContext, player *AudioPlayer) string {
 	url, _ := node.Config["url"].(string)
 	method, _ := node.Config["method"].(string)
 	if method == "" {
@@ -433,7 +433,28 @@ func (m *Manager) executeHTTPCallback(session *CallSession, node *IVRNode, ctx *
 	url = interpolateTemplate(url, ctx.Variables)
 	body := interpolateTemplate(bodyTemplate, ctx.Variables)
 
+	// Optional progress audio keeps the caller informed while the HTTP request
+	// is in flight. It loops until the request returns (success or failure), then
+	// the shared RTP player is stopped and reset before the next IVR node runs.
+	progressAudioFile, _ := node.Config["progress_audio_file"].(string)
+	var progressDone chan struct{}
+	if progressAudioFile != "" && player != nil && m.config.AudioDir != "" {
+		fullPath := filepath.Join(m.config.AudioDir, progressAudioFile)
+		progressDone = make(chan struct{})
+		go func() {
+			defer close(progressDone)
+			if err := player.PlayFileLoop(fullPath); err != nil {
+				m.log.Error("Failed to play HTTP progress audio", "error", err, "call_id", session.ID, "file", progressAudioFile)
+			}
+		}()
+	}
+
 	result, err := executeHTTPCallback(url, method, headers, body, time.Duration(timeoutSecs)*time.Second)
+	if progressDone != nil {
+		player.Stop()
+		<-progressDone
+		player.ResetAfterInterrupt()
+	}
 	if err != nil {
 		m.log.Error("HTTP callback failed", "error", err, "call_id", session.ID, "url", url)
 		return "http:non2xx"

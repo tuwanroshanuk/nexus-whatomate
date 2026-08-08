@@ -120,6 +120,75 @@ function stopAudio() {
   isPlaying.value = false
 }
 
+
+// HTTP callback progress audio state. This file is looped to the caller only
+// while the live HTTP request is running.
+const progressAudioFileInput = ref<HTMLInputElement | null>(null)
+const isUploadingProgressAudio = ref(false)
+const isPlayingProgressAudio = ref(false)
+const progressAudioElement = ref<HTMLAudioElement | null>(null)
+
+function triggerProgressAudioUpload() {
+  progressAudioFileInput.value?.click()
+}
+
+async function handleProgressAudioFileSelect(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error('File too large (max 5MB)')
+    input.value = ''
+    return
+  }
+  isUploadingProgressAudio.value = true
+  try {
+    const res = await ivrFlowsService.uploadAudio(file)
+    const filename = res.data?.data?.filename
+    if (filename) {
+      updateConfig('progress_audio_file', filename)
+      toast.success('Progress audio uploaded')
+    }
+  } catch {
+    toast.error('Progress audio upload failed')
+  } finally {
+    isUploadingProgressAudio.value = false
+    input.value = ''
+  }
+}
+
+function removeProgressAudio() {
+  stopProgressAudio()
+  updateConfig('progress_audio_file', '')
+}
+
+function toggleProgressAudioPlayback() {
+  if (isPlayingProgressAudio.value) stopProgressAudio()
+  else playProgressAudio()
+}
+
+function playProgressAudio() {
+  const filename = String(config.value.progress_audio_file || '')
+  if (!filename) return
+  stopProgressAudio()
+  const audio = new Audio(ivrFlowsService.getAudioUrl(filename))
+  audio.loop = true
+  audio.onended = () => { isPlayingProgressAudio.value = false }
+  audio.onerror = () => { isPlayingProgressAudio.value = false }
+  audio.play()
+  progressAudioElement.value = audio
+  isPlayingProgressAudio.value = true
+}
+
+function stopProgressAudio() {
+  if (progressAudioElement.value) {
+    progressAudioElement.value.pause()
+    progressAudioElement.value.currentTime = 0
+    progressAudioElement.value = null
+  }
+  isPlayingProgressAudio.value = false
+}
+
 // Menu options helpers
 function addMenuOption() {
   const opts = { ...(config.value.options || {}) }
@@ -541,6 +610,30 @@ const greetingTab = computed(() =>
       <div class="space-y-1.5">
         <Label class="text-xs">Store Response As (variable name)</Label>
         <Input :model-value="config.response_store_as || ''" @update:model-value="(v: string) => updateConfig('response_store_as', v)" placeholder="e.g. api_response" class="h-8 text-sm" />
+      </div>
+      <div class="space-y-1.5">
+        <div>
+          <Label class="text-xs">Progress Audio <span class="text-muted-foreground font-normal">(optional)</span></Label>
+          <p class="text-[10px] text-muted-foreground mt-0.5">Loops while the HTTP request is processing and stops as soon as the response arrives.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <div v-if="config.progress_audio_file" class="flex items-center gap-1 flex-1 min-w-0 px-2 py-1 border rounded-md bg-muted/50">
+            <Button type="button" variant="ghost" size="icon" class="h-5 w-5 shrink-0" @click="toggleProgressAudioPlayback">
+              <Pause v-if="isPlayingProgressAudio" class="h-3 w-3" />
+              <Play v-else class="h-3 w-3" />
+            </Button>
+            <span class="text-xs truncate">{{ config.progress_audio_file }}</span>
+            <Button type="button" variant="ghost" size="icon" class="h-5 w-5 shrink-0 ml-auto" @click="removeProgressAudio">
+              <X class="h-3 w-3 text-destructive" />
+            </Button>
+          </div>
+          <Button v-else type="button" variant="outline" size="sm" class="h-7 text-xs w-full" @click="triggerProgressAudioUpload" :disabled="isUploadingProgressAudio">
+            <Loader2 v-if="isUploadingProgressAudio" class="h-3 w-3 animate-spin" />
+            <Upload v-else class="h-3 w-3" />
+            Select Progress Audio
+          </Button>
+          <input ref="progressAudioFileInput" type="file" accept="audio/*" class="hidden" @change="handleProgressAudioFileSelect" />
+        </div>
       </div>
       <div class="space-y-2 rounded-lg border p-2.5 bg-muted/20">
         <div>
