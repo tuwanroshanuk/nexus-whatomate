@@ -4,6 +4,7 @@ set -eu
 REAL_PIPER="${WHATOMATE_PIPER_REAL:-/usr/local/bin/piper-real}"
 VITS_PYTHON="${WHATOMATE_VITS_PYTHON:-/opt/whatomate-vits/bin/python3}"
 VITS_RUNNER="${WHATOMATE_VITS_RUNNER:-/usr/local/lib/whatomate/vits_onnx.py}"
+VITS_LOCK="${WHATOMATE_VITS_LOCK:-/tmp/whatomate-vits.lock}"
 
 model=""
 output=""
@@ -32,11 +33,23 @@ config="${model}.json"
 if [ -n "$model" ] && [ -n "$output" ] && [ -f "$config" ] \
    && grep -q '"framework"[[:space:]]*:[[:space:]]*"Coqui VITS"' "$config" \
    && grep -q '"requires_external_romanizer"[[:space:]]*:[[:space:]]*true' "$config"; then
-    exec "$VITS_PYTHON" "$VITS_RUNNER" \
+    # Only one model-sized ONNX process is allowed at a time. Waiting calls stay
+    # as tiny shell processes, preventing concurrent IVR requests from
+    # multiplying the ~100+ MB model working set.
+    while ! mkdir "$VITS_LOCK" 2>/dev/null; do
+        sleep 0.05
+    done
+    trap 'rmdir "$VITS_LOCK" 2>/dev/null || true' EXIT INT TERM
+
+    "$VITS_PYTHON" "$VITS_RUNNER" \
         --model "$model" \
         --config "$config" \
         --output "$output" \
         --length-scale "$length_scale"
+    status=$?
+    rmdir "$VITS_LOCK" 2>/dev/null || true
+    trap - EXIT INT TERM
+    exit "$status"
 fi
 
 exec "$REAL_PIPER" "$@"
