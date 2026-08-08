@@ -282,6 +282,50 @@ func (p *PiperTTS) InstallModel(name string, modelData, configData []byte) (Mode
 	}, nil
 }
 
+// UninstallModel removes an installed Piper model and its matching JSON config.
+// Only files inside the managed ModelDir can be removed. The active default
+// model must be changed before it can be uninstalled.
+func (p *PiperTTS) UninstallModel(name string) (int64, error) {
+	filename, err := sanitizeModelFilename(name)
+	if err != nil {
+		return 0, err
+	}
+	settings := p.GetSettings()
+	if filename == settings.DefaultModel {
+		return 0, fmt.Errorf("cannot uninstall the active default model; select another default model first")
+	}
+
+	dir := p.modelDir()
+	modelPath := filepath.Join(dir, filename)
+	if !fileExists(modelPath) {
+		// A legacy configured model may appear in ListModels even when it lives
+		// outside ModelDir. Never delete arbitrary external paths from this API.
+		if p.ModelPath != "" && filepath.Base(p.ModelPath) == filename && fileExists(p.ModelPath) {
+			return 0, fmt.Errorf("this model is configured outside the managed model directory and cannot be uninstalled here")
+		}
+		return 0, fmt.Errorf("Piper model %q is not installed in the managed model directory", filename)
+	}
+
+	var freed int64
+	if info, statErr := os.Stat(modelPath); statErr == nil {
+		freed += info.Size()
+	}
+	configPath := modelPath + ".json"
+	if info, statErr := os.Stat(configPath); statErr == nil {
+		freed += info.Size()
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := os.Remove(modelPath); err != nil {
+		return 0, fmt.Errorf("remove model: %w", err)
+	}
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		return freed, fmt.Errorf("model removed but config cleanup failed: %w", err)
+	}
+	return freed, nil
+}
+
 func (p *PiperTTS) resolveModel(model string) (string, error) {
 	model = strings.TrimSpace(model)
 	if model == "" {

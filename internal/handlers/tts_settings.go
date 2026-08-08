@@ -144,6 +144,29 @@ func (a *App) DownloadTTSModel(r *fastglue.Request) error {
 	return r.SendEnvelope(model)
 }
 
+// UninstallTTSModel removes a managed Piper model and its matching config file.
+func (a *App) UninstallTTSModel(r *fastglue.Request) error {
+	if _, _, err := a.requireAuth(r, models.ResourceIVRFlows, models.ActionWrite); err != nil {
+		return nil
+	}
+	if !a.requireTTS(r) {
+		return nil
+	}
+	name := strings.TrimSpace(r.RequestCtx.UserValue("name").(string))
+	if name == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Model name is required", nil, "")
+	}
+	freed, err := a.TTS.UninstallModel(name)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
+	a.Log.Info("TTS model uninstalled", "model", name, "freed_bytes", freed)
+	return r.SendEnvelope(map[string]any{
+		"model":       name,
+		"freed_bytes": freed,
+	})
+}
+
 type ttsPreviewRequest struct {
 	Text        string  `json:"text"`
 	Model       string  `json:"model"`

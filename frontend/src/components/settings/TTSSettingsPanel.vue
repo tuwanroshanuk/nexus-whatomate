@@ -6,13 +6,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Download, Loader2, Play, Pause, RefreshCw, Volume2 } from 'lucide-vue-next'
+import { Download, Loader2, Play, Pause, RefreshCw, Trash2, Volume2 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 const loading = ref(true)
 const saving = ref(false)
 const downloading = ref(false)
 const previewing = ref(false)
+const uninstalling = ref('')
 const models = ref<TTSModelInfo[]>([])
 const modelDir = ref('')
 const settings = ref<TTSSettings>({ default_model: '', default_language: 'auto', number_mode: 'phone_digits', length_scale: 1 })
@@ -65,6 +66,25 @@ async function downloadModel() {
   } catch (e: any) {
     toast.error(e?.response?.data?.message || 'Model download failed')
   } finally { downloading.value = false }
+}
+
+async function uninstallModel(model: TTSModelInfo) {
+  if (model.is_default) {
+    toast.error('Select another default voice and save it before uninstalling this model')
+    return
+  }
+  if (!window.confirm(`Uninstall ${model.name}? The ONNX model and its config file will be permanently removed from disk.`)) return
+  uninstalling.value = model.file
+  try {
+    const res = await ttsService.uninstallModel(model.file)
+    const data = (res.data as any)?.data || res.data
+    toast.success(`${model.name} uninstalled · ${size(Number(data?.freed_bytes || 0))} reclaimed`)
+    await load()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message || 'Could not uninstall TTS model')
+  } finally {
+    uninstalling.value = ''
+  }
 }
 
 function stopPreview() {
@@ -181,7 +201,20 @@ onMounted(load)
               <div class="text-sm font-medium truncate">{{ model.name }} <span v-if="model.is_default" class="text-xs text-primary">Default</span></div>
               <div class="text-xs text-muted-foreground">{{ model.language || 'Language not declared' }} · {{ size(model.size) }} · {{ model.has_config ? 'config ready' : 'no .onnx.json config' }}</div>
             </div>
-            <code class="text-[10px] text-muted-foreground truncate ml-3">{{ model.file }}</code>
+            <div class="flex items-center gap-2 ml-3 shrink-0">
+              <code class="text-[10px] text-muted-foreground max-w-[180px] truncate">{{ model.file }}</code>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-8 w-8"
+                :disabled="model.is_default || uninstalling === model.file"
+                :title="model.is_default ? 'Change the default model before uninstalling' : 'Uninstall model and free disk space'"
+                @click="uninstallModel(model)"
+              >
+                <Loader2 v-if="uninstalling === model.file" class="h-4 w-4 animate-spin" />
+                <Trash2 v-else class="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
           </div>
           <p v-if="!models.length" class="text-sm text-muted-foreground">No models were found. Download one below or configure piper_model/model_dir.</p>
         </div>

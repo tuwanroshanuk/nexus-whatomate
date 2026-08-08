@@ -836,6 +836,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/tts/settings", app.GetTTSSettings)
 	g.PUT("/api/tts/settings", app.UpdateTTSSettings)
 	g.POST("/api/tts/models/download", app.DownloadTTSModel)
+	g.DELETE("/api/tts/models/{name}", app.UninstallTTSModel)
 	g.POST("/api/tts/preview", app.PreviewTTS)
 
 	// IVR Flows

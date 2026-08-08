@@ -1260,6 +1260,8 @@ export const ttsService = {
   updateSettings: (settings: TTSSettings) => api.put<TTSSettings>('/tts/settings', settings),
   downloadModel: (data: { name: string; model_url: string; config_url?: string }) =>
     api.post<TTSModelInfo>('/tts/models/download', data, { timeout: 5 * 60 * 1000 }),
+  uninstallModel: (name: string) =>
+    api.delete<{ model: string; freed_bytes: number }>(`/tts/models/${encodeURIComponent(name)}`),
   preview: (data: { text: string; model?: string; language?: string; number_mode?: string; length_scale?: number }) =>
     api.post<{ filename: string }>('/tts/preview', data, { timeout: 90 * 1000 }),
 }
