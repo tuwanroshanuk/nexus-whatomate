@@ -24,7 +24,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Apply implementation
-        run: python .github/scripts/apply_tts_settings.py
+        run: python .github/scripts/run_tts_settings.py
       - name: Format Go
         run: gofmt -w internal/tts/piper.go internal/tts/piper_test.go internal/calling/runtime_tts.go internal/config/config.go internal/handlers/tts_settings.go internal/handlers/ivr_flows.go cmd/whatomate/main.go
       - name: Test TTS and calling backend
@@ -49,6 +49,7 @@ jobs:
         run: npm run build
       - name: Commit implementation to main
         run: |
+          rm -f .github/scripts/run_tts_settings.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
