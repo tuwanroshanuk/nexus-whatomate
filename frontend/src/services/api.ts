@@ -1240,10 +1240,31 @@ export const callTransfersService = {
 }
 
 export interface TTSSettings {
+  default_provider: 'local' | 'gemini' | 'google_cloud'
   default_model: string
   default_language: string
   number_mode: 'natural' | 'phone_digits' | 'all_digits'
   length_scale: number
+  gemini_model: string
+  gemini_voice: string
+  gemini_prompt: string
+  google_cloud_voice: string
+  google_cloud_language: string
+}
+
+export interface TTSProviderStatus {
+  local: boolean
+  gemini: { configured: boolean }
+  google_cloud: { configured: boolean; project_id?: string }
+}
+
+export interface GoogleCloudTTSVoice {
+  name: string
+  language_codes: string[]
+  gender: string
+  natural_sample_rate_hertz: number
+  tier: 'standard' | 'wavenet' | 'neural2' | 'studio' | 'chirp3_hd' | 'other'
+  free_limit_characters: number
 }
 
 export interface TTSModelInfo {
@@ -1256,13 +1277,20 @@ export interface TTSModelInfo {
 }
 
 export const ttsService = {
-  getSettings: () => api.get<{ settings: TTSSettings; models: TTSModelInfo[]; model_dir: string }>('/tts/settings'),
+  getSettings: () => api.get<{ settings: TTSSettings; models: TTSModelInfo[]; model_dir: string; providers: TTSProviderStatus }>('/tts/settings'),
   updateSettings: (settings: TTSSettings) => api.put<TTSSettings>('/tts/settings', settings),
+  setGoogleCloudCredentials: (serviceAccountJson: string) => api.put('/tts/providers/google-cloud', { service_account_json: serviceAccountJson }),
+  clearGoogleCloudCredentials: () => api.delete('/tts/providers/google-cloud'),
+  getGoogleCloudVoices: () => api.get<{ voices: GoogleCloudTTSVoice[] }>('/tts/providers/google-cloud/voices', { timeout: 30 * 1000 }),
+  testGoogleCloud: () => api.post<{ ok: boolean; filename: string }>('/tts/providers/google-cloud/test', {}, { timeout: 90 * 1000 }),
+  setGeminiCredentials: (apiKey: string) => api.put('/tts/providers/gemini', { api_key: apiKey }),
+  clearGeminiCredentials: () => api.delete('/tts/providers/gemini'),
+  testGemini: () => api.post<{ ok: boolean; filename: string }>('/tts/providers/gemini/test', {}, { timeout: 90 * 1000 }),
   downloadModel: (data: { name: string; model_url: string; config_url?: string }) =>
     api.post<TTSModelInfo>('/tts/models/download', data, { timeout: 5 * 60 * 1000 }),
   uninstallModel: (name: string) =>
     api.delete<{ model: string; freed_bytes: number }>(`/tts/models/${encodeURIComponent(name)}`),
-  preview: (data: { text: string; model?: string; language?: string; number_mode?: string; length_scale?: number }) =>
+  preview: (data: { text: string; provider?: string; model?: string; language?: string; number_mode?: string; length_scale?: number; gemini_model?: string; gemini_voice?: string; gemini_prompt?: string; google_cloud_voice?: string; google_cloud_language?: string; google_cloud_speaking_rate?: number }) =>
     api.post<{ filename: string }>('/tts/preview', data, { timeout: 90 * 1000 }),
 }
 

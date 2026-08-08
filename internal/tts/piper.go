@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,10 +27,16 @@ const (
 // Settings are server-wide Piper defaults. Individual IVR TTS nodes can
 // override these values without changing the global defaults.
 type Settings struct {
-	DefaultModel    string  `json:"default_model"`
-	DefaultLanguage string  `json:"default_language"`
-	NumberMode      string  `json:"number_mode"`
-	LengthScale     float64 `json:"length_scale"`
+	DefaultProvider     string  `json:"default_provider"`
+	DefaultModel        string  `json:"default_model"`
+	DefaultLanguage     string  `json:"default_language"`
+	NumberMode          string  `json:"number_mode"`
+	LengthScale         float64 `json:"length_scale"`
+	GeminiModel         string  `json:"gemini_model"`
+	GeminiVoice         string  `json:"gemini_voice"`
+	GeminiPrompt        string  `json:"gemini_prompt"`
+	GoogleCloudVoice    string  `json:"google_cloud_voice"`
+	GoogleCloudLanguage string  `json:"google_cloud_language"`
 }
 
 // ModelInfo describes one installed Piper .onnx voice.
@@ -52,6 +59,8 @@ type PiperTTS struct {
 	SettingsPath  string
 	OpusencBinary string
 	AudioDir      string
+	HTTPClient    *http.Client
+	SecretKey     string
 	mu            sync.RWMutex
 }
 
@@ -87,10 +96,14 @@ func (p *PiperTTS) defaultSettings() Settings {
 		model = ""
 	}
 	return Settings{
-		DefaultModel:    model,
-		DefaultLanguage: "auto",
-		NumberMode:      NumberModePhoneDigits,
-		LengthScale:     1.0,
+		DefaultProvider:     "local",
+		DefaultModel:        model,
+		DefaultLanguage:     "auto",
+		NumberMode:          NumberModePhoneDigits,
+		LengthScale:         1.0,
+		GeminiModel:         "gemini-2.5-flash-preview-tts",
+		GeminiVoice:         "Kore",
+		GoogleCloudLanguage: "en-US",
 	}
 }
 
@@ -101,6 +114,15 @@ func (p *PiperTTS) GetSettings() Settings {
 	data, err := os.ReadFile(p.settingsPath())
 	if err == nil {
 		_ = json.Unmarshal(data, &settings)
+	}
+	if settings.DefaultProvider != "local" && settings.DefaultProvider != "gemini" && settings.DefaultProvider != "google_cloud" {
+		settings.DefaultProvider = "local"
+	}
+	if settings.GeminiModel == "" {
+		settings.GeminiModel = "gemini-2.5-flash-preview-tts"
+	}
+	if settings.GeminiVoice == "" {
+		settings.GeminiVoice = "Kore"
 	}
 	if !validNumberMode(settings.NumberMode) {
 		settings.NumberMode = NumberModePhoneDigits
@@ -115,6 +137,28 @@ func (p *PiperTTS) GetSettings() Settings {
 }
 
 func (p *PiperTTS) UpdateSettings(settings Settings) (Settings, error) {
+	if settings.DefaultProvider != "local" && settings.DefaultProvider != "gemini" && settings.DefaultProvider != "google_cloud" {
+		return Settings{}, fmt.Errorf("invalid TTS provider")
+	}
+	if settings.GeminiModel == "" {
+		settings.GeminiModel = "gemini-2.5-flash-preview-tts"
+	}
+	if settings.GeminiVoice == "" {
+		settings.GeminiVoice = "Kore"
+	}
+	if settings.DefaultProvider == "gemini" {
+		if configured, _ := p.GeminiConfigured(); !configured {
+			return Settings{}, fmt.Errorf("Gemini TTS credentials are not configured")
+		}
+	}
+	if settings.DefaultProvider == "google_cloud" {
+		if configured, _ := p.GoogleCloudConfigured(); !configured {
+			return Settings{}, fmt.Errorf("Google Cloud TTS credentials are not configured")
+		}
+		if strings.TrimSpace(settings.GoogleCloudVoice) == "" {
+			return Settings{}, fmt.Errorf("select a Google Cloud TTS voice")
+		}
+	}
 	if !validNumberMode(settings.NumberMode) {
 		return Settings{}, fmt.Errorf("invalid number pronunciation mode")
 	}
@@ -408,13 +452,26 @@ func (p *PiperTTS) Generate(text string) (string, error) {
 // language is determined by the selected Piper model.
 func (p *PiperTTS) GenerateWithConfig(text string, config map[string]any) (string, error) {
 	settings := p.GetSettings()
-	model := configString(config, "tts_model")
-	if model == "" {
-		model = settings.DefaultModel
+	provider := configString(config, "tts_provider")
+	if provider == "" {
+		provider = settings.DefaultProvider
 	}
 	mode := configString(config, "tts_number_mode")
 	if mode == "" {
 		mode = settings.NumberMode
+	}
+	if provider == "gemini" {
+		return p.generateGemini(PrepareText(text, mode), config, settings)
+	}
+	if provider == "google_cloud" {
+		return p.generateGoogleCloud(PrepareText(text, mode), config, settings)
+	}
+	if provider != "local" {
+		return "", fmt.Errorf("unsupported TTS provider %q", provider)
+	}
+	model := configString(config, "tts_model")
+	if model == "" {
+		model = settings.DefaultModel
 	}
 	lengthScale := configFloat(config, "tts_length_scale")
 	if lengthScale == 0 {

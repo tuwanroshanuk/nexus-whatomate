@@ -39,6 +39,7 @@ func (a *App) GetTTSSettings(r *fastglue.Request) error {
 		"settings":  a.TTS.GetSettings(),
 		"models":    modelsList,
 		"model_dir": a.Config.TTS.ModelDir,
+		"providers": a.TTS.GetProviderStatus(),
 	})
 }
 
@@ -168,11 +169,18 @@ func (a *App) UninstallTTSModel(r *fastglue.Request) error {
 }
 
 type ttsPreviewRequest struct {
-	Text        string  `json:"text"`
-	Model       string  `json:"model"`
-	Language    string  `json:"language"`
-	NumberMode  string  `json:"number_mode"`
-	LengthScale float64 `json:"length_scale"`
+	Text                    string  `json:"text"`
+	Provider                string  `json:"provider"`
+	GeminiModel             string  `json:"gemini_model"`
+	GeminiVoice             string  `json:"gemini_voice"`
+	GeminiPrompt            string  `json:"gemini_prompt"`
+	GoogleCloudVoice        string  `json:"google_cloud_voice"`
+	GoogleCloudLanguage     string  `json:"google_cloud_language"`
+	GoogleCloudSpeakingRate float64 `json:"google_cloud_speaking_rate"`
+	Model                   string  `json:"model"`
+	Language                string  `json:"language"`
+	NumberMode              string  `json:"number_mode"`
+	LengthScale             float64 `json:"length_scale"`
 }
 
 // PreviewTTS generates an audio preview using the same option path as IVR.
@@ -194,10 +202,17 @@ func (a *App) PreviewTTS(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Preview text is limited to 500 characters", nil, "")
 	}
 	config := map[string]any{
-		"tts_model":        req.Model,
-		"tts_language":     req.Language,
-		"tts_number_mode":  req.NumberMode,
-		"tts_length_scale": req.LengthScale,
+		"tts_provider":                   req.Provider,
+		"tts_gemini_model":               req.GeminiModel,
+		"tts_gemini_voice":               req.GeminiVoice,
+		"tts_gemini_prompt":              req.GeminiPrompt,
+		"tts_google_cloud_voice":         req.GoogleCloudVoice,
+		"tts_google_cloud_language":      req.GoogleCloudLanguage,
+		"tts_google_cloud_speaking_rate": req.GoogleCloudSpeakingRate,
+		"tts_model":                      req.Model,
+		"tts_language":                   req.Language,
+		"tts_number_mode":                req.NumberMode,
+		"tts_length_scale":               req.LengthScale,
 	}
 	filename, err := a.TTS.GenerateWithConfig(req.Text, config)
 	if err != nil {

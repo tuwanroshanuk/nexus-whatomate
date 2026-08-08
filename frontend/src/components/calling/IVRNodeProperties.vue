@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue' 
 import type { IVRNode, IVRNodeType, IVRVariableDefinition, IVRHTTPDiscoveredVariable } from '@/services/api'
-import { ivrFlowsService, ttsService, type TTSModelInfo, type TTSSettings } from '@/services/api' 
+import { ivrFlowsService, ttsService, type TTSModelInfo, type TTSSettings, type GoogleCloudTTSVoice } from '@/services/api' 
 import { useCallingStore } from '@/stores/calling'
 import { useTeamsStore } from '@/stores/teams'
 import { Input } from '@/components/ui/input'
@@ -35,6 +35,13 @@ const config = computed(() => props.node.config || {})
 
 const ttsModels = ref<TTSModelInfo[]>([])
 const ttsDefaults = ref<TTSSettings | null>(null)
+const googleCloudVoices = ref<GoogleCloudTTSVoice[]>([])
+const effectiveTTSProvider = computed(() => String(config.value.tts_provider || ttsDefaults.value?.default_provider || 'local'))
+const geminiModels = [['gemini-3.1-flash-tts-preview', 'Gemini 3.1 Flash TTS Preview'], ['gemini-2.5-flash-preview-tts', 'Gemini 2.5 Flash Preview TTS'], ['gemini-2.5-pro-preview-tts', 'Gemini 2.5 Pro Preview TTS']]
+const geminiVoices = ['Kore','Puck','Charon','Zephyr','Fenrir','Leda','Orus','Aoede','Callirrhoe','Autonoe','Enceladus','Iapetus','Umbriel','Algieba','Despina','Erinome','Algenib','Rasalgethi','Laomedeia','Achernar','Alnilam','Schedar','Gacrux','Pulcherrima','Achird','Zubenelgenubi','Vindemiatrix','Sadachbia','Sadaltager','Sulafat']
+const primaryTTSLanguages = [['si-LK','Sinhala (Sri Lanka)'],['en-US','English (United States)'],['ko-KR','Korean (South Korea)'],['es-ES','Spanish (Spain)'],['ja-JP','Japanese (Japan)']]
+const effectiveCloudLanguage = computed(() => String(config.value.tts_google_cloud_language || ttsDefaults.value?.google_cloud_language || 'en-US'))
+const filteredNodeCloudVoices = computed(() => effectiveCloudLanguage.value === 'si-LK' ? [] : googleCloudVoices.value.filter(v => v.language_codes?.includes(effectiveCloudLanguage.value)))
 
 async function loadTTSOptions() {
   try {
@@ -42,6 +49,13 @@ async function loadTTSOptions() {
     const data = (res.data as any)?.data || res.data
     ttsModels.value = data.models || []
     ttsDefaults.value = data.settings || null
+    if (data.providers?.google_cloud?.configured) {
+      try {
+        const voicesRes = await ttsService.getGoogleCloudVoices()
+        const voicesData = (voicesRes.data as any)?.data || voicesRes.data
+        googleCloudVoices.value = voicesData.voices || []
+      } catch {}
+    }
   } catch {
     // TTS can be disabled server-side; keep the normal audio editor usable.
   }
@@ -513,8 +527,15 @@ const greetingTab = computed(() =>
           <IVRVariablePicker :variables="availableVariables" @select="insertVariableIntoTTS" />
           <div class="rounded-lg border p-2.5 space-y-2 bg-muted/20">
             <div class="text-[11px] font-medium">TTS Options <span class="text-muted-foreground font-normal">(optional overrides)</span></div>
+            <div class="space-y-1">
+              <Label class="text-[10px]">Provider</Label>
+              <Select :model-value="config.tts_provider || '__global__'" @update:model-value="(v: any) => updateConfig('tts_provider', v === '__global__' ? '' : v)">
+                <SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="__global__">Global default · {{ ttsDefaults?.default_provider || 'local' }}</SelectItem><SelectItem value="local">Local Piper</SelectItem><SelectItem value="google_cloud">Google Cloud TTS</SelectItem><SelectItem value="gemini">Gemini TTS</SelectItem></SelectContent>
+              </Select>
+            </div>
             <div class="grid grid-cols-2 gap-2">
-              <div class="space-y-1">
+              <div v-if="effectiveTTSProvider === 'local'" class="space-y-1">
                 <Label class="text-[10px]">Voice model</Label>
                 <Select :model-value="config.tts_model || '__global__'" @update:model-value="(v: any) => updateConfig('tts_model', v === '__global__' ? '' : v)">
                   <SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger>
@@ -538,7 +559,7 @@ const greetingTab = computed(() =>
               </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
-              <div class="space-y-1">
+              <div v-if="effectiveTTSProvider === 'local'" class="space-y-1">
                 <Label class="text-[10px]">Language / locale</Label>
                 <Select :model-value="config.tts_language || '__global__'" @update:model-value="(v: any) => updateConfig('tts_language', v === '__global__' ? '' : v)">
                   <SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger>
@@ -547,12 +568,35 @@ const greetingTab = computed(() =>
                   </SelectContent>
                 </Select>
               </div>
-              <div class="space-y-1">
+              <div v-if="effectiveTTSProvider === 'local'" class="space-y-1">
                 <Label class="text-[10px]">Length scale</Label>
                 <Input type="number" min="0.5" max="2" step="0.05" :model-value="String(config.tts_length_scale || '')" @update:model-value="(v: string) => updateConfig('tts_length_scale', v ? Number(v) : 0)" :placeholder="ttsDefaults ? `Global ${ttsDefaults.length_scale}` : 'Global'" class="h-7 text-xs" />
               </div>
             </div>
-            <p class="text-[10px] text-muted-foreground">Phone digit mode turns 94741682210 into 9, 4, 7, 4, 1, 6, 8, 2, 2, 1, 0 before Piper speaks it.</p>
+            <div v-if="effectiveTTSProvider === 'google_cloud'" class="space-y-2 border-t pt-2">
+              <div class="space-y-1">
+                <Label class="text-[10px]">Google Cloud voice</Label>
+                <Select :model-value="config.tts_google_cloud_voice || '__global__'" @update:model-value="(v: any) => updateConfig('tts_google_cloud_voice', v === '__global__' ? '' : v)">
+                  <SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="__global__">Global · {{ ttsDefaults?.google_cloud_voice || 'not selected' }}</SelectItem><SelectItem v-for="voice in filteredNodeCloudVoices" :key="voice.name" :value="voice.name">{{ voice.name }}</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="space-y-1"><Label class="text-[10px]">Language</Label><Select :model-value="config.tts_google_cloud_language || '__global__'" @update:model-value="(v: any) => updateConfigEntries({ tts_google_cloud_language: v === '__global__' ? '' : v, tts_google_cloud_voice: '' })"><SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__global__">Global · {{ ttsDefaults?.google_cloud_language || 'en-US' }}</SelectItem><SelectItem v-for="item in primaryTTSLanguages" :key="item[0]" :value="item[0]">{{ item[1] }}</SelectItem></SelectContent></Select></div>
+                <div class="space-y-1"><Label class="text-[10px]">Speaking rate</Label><Input type="number" min="0.25" max="4" step="0.05" :model-value="config.tts_google_cloud_speaking_rate || 1" @update:model-value="(v: string | number) => updateConfig('tts_google_cloud_speaking_rate', Number(v) || 1)" class="h-7 text-xs" /></div>
+              </div>
+              <p v-if="effectiveCloudLanguage === 'si-LK'" class="text-[10px] text-primary">Google Cloud TTS currently has no published Sinhala synthesis voice. Use Local Piper or Gemini TTS for Sinhala.</p>
+              <p v-else class="text-[10px] text-muted-foreground">Standard/WaveNet include up to 4M free characters monthly; Neural2 and Chirp 3 HD include up to 1M. Chirp 3 HD ignores speaking-rate controls.</p>
+            </div>
+            <div v-if="effectiveTTSProvider === 'gemini'" class="space-y-2 border-t pt-2">
+              <div class="grid grid-cols-2 gap-2">
+                <div class="space-y-1"><Label class="text-[10px]">Gemini model</Label><Select :model-value="config.tts_gemini_model || '__global__'" @update:model-value="(v: any) => updateConfig('tts_gemini_model', v === '__global__' ? '' : v)"><SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__global__">Global · {{ ttsDefaults?.gemini_model || 'Gemini Flash TTS' }}</SelectItem><SelectItem v-for="item in geminiModels" :key="item[0]" :value="item[0]">{{ item[1] }}</SelectItem></SelectContent></Select></div>
+                <div class="space-y-1"><Label class="text-[10px]">Gemini voice</Label><Select :model-value="config.tts_gemini_voice || '__global__'" @update:model-value="(v: any) => updateConfig('tts_gemini_voice', v === '__global__' ? '' : v)"><SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__global__">Global · {{ ttsDefaults?.gemini_voice || 'Kore' }}</SelectItem><SelectItem v-for="voice in geminiVoices" :key="voice" :value="voice">{{ voice }}</SelectItem></SelectContent></Select></div>
+              </div>
+              <div class="space-y-1"><Label class="text-[10px]">Voice direction</Label><Textarea :model-value="config.tts_gemini_prompt || ''" @update:model-value="(v: string) => updateConfig('tts_gemini_prompt', v)" placeholder="Warm, professional, brisk pace, natural Sri Lankan accent…" class="min-h-[58px] text-xs" /></div>
+              <p class="text-[10px] text-muted-foreground">Gemini automatically handles supported languages from the text. The voice direction controls style, accent, pace and tone.</p>
+            </div>
+            <p class="text-[10px] text-muted-foreground">Phone digit mode turns 94741682210 into 9, 4, 7, 4, 1, 6, 8, 2, 2, 1, 0 before the selected provider speaks it.</p>
           </div>
           <div v-if="usedTTSVariables.length" class="flex flex-wrap gap-1">
             <span

@@ -240,19 +240,21 @@ func runServer(args []string) {
 	go app.CallManager.StartWatchdog(watchdogCtx)
 	defer watchdogCancel()
 
-	// Initialize TTS if configured (requires piper binary + model)
-	if cfg.TTS.PiperBinary != "" && cfg.TTS.PiperModel != "" {
-		app.TTS = &tts.PiperTTS{
-			BinaryPath:    cfg.TTS.PiperBinary,
-			ModelPath:     cfg.TTS.PiperModel,
-			ModelDir:      cfg.TTS.ModelDir,
-			SettingsPath:  cfg.TTS.SettingsPath,
-			OpusencBinary: cfg.TTS.OpusencBinary,
-			AudioDir:      cfg.Calling.AudioDir,
-		}
-		calling.SetRuntimeTTSGenerator(app.TTS)
-		lo.Info("TTS initialized", "piper", cfg.TTS.PiperBinary, "model", cfg.TTS.PiperModel)
+	// Initialize provider-aware TTS. Local Piper remains available when its
+	// binary/model are configured; external providers can be configured securely
+	// from Settings without replacing the local engine.
+	app.TTS = &tts.PiperTTS{
+		BinaryPath:    cfg.TTS.PiperBinary,
+		ModelPath:     cfg.TTS.PiperModel,
+		ModelDir:      cfg.TTS.ModelDir,
+		SettingsPath:  cfg.TTS.SettingsPath,
+		OpusencBinary: cfg.TTS.OpusencBinary,
+		AudioDir:      cfg.Calling.AudioDir,
+		HTTPClient:    httpClient,
+		SecretKey:     cfg.App.EncryptionKey,
 	}
+	calling.SetRuntimeTTSGenerator(app.TTS)
+	lo.Info("TTS provider engine initialized", "piper", cfg.TTS.PiperBinary, "model", cfg.TTS.PiperModel)
 
 	// Start campaign stats subscriber for real-time WebSocket updates from worker
 	if err := app.StartCampaignStatsSubscriber(); err != nil {
@@ -832,12 +834,21 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/custom-actions/{id}/execute", app.ExecuteCustomAction)
 	g.GET("/api/custom-actions/redirect/{token}", app.CustomActionRedirect)
 
-	// TTS settings and Piper voice management
+	// TTS settings, provider credentials and voice management
 	g.GET("/api/tts/settings", app.GetTTSSettings)
 	g.PUT("/api/tts/settings", app.UpdateTTSSettings)
 	g.POST("/api/tts/models/download", app.DownloadTTSModel)
-	g.DELETE("/api/tts/models/{name}", app.UninstallTTSModel)
+	// Keep these three contiguous: the Cloud-provider extension inserts its
+	// routes between the Gemini test route and preview route.
+	g.POST("/api/tts/providers/gemini/test", app.TestGeminiTTSProvider)
+	g.PUT("/api/tts/providers/google-cloud", app.UpdateGoogleCloudTTSCredentials)
+	g.DELETE("/api/tts/providers/google-cloud", app.DeleteGoogleCloudTTSCredentials)
+	g.GET("/api/tts/providers/google-cloud/voices", app.ListGoogleCloudTTSVoices)
+	g.POST("/api/tts/providers/google-cloud/test", app.TestGoogleCloudTTSProvider)
 	g.POST("/api/tts/preview", app.PreviewTTS)
+	g.PUT("/api/tts/providers/gemini", app.UpdateGeminiTTSCredentials)
+	g.DELETE("/api/tts/providers/gemini", app.DeleteGeminiTTSCredentials)
+	g.DELETE("/api/tts/models/{name}", app.UninstallTTSModel)
 
 	// IVR Flows
 	g.GET("/api/ivr-flows", app.ListIVRFlows)
