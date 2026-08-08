@@ -45,11 +45,11 @@ type TTSConfig struct {
 const defaultTURNCredentialTTLSecs = 86400 // 24h
 
 type ICEServerConfig struct {
-	URLs       []string `koanf:"urls"`
-	Username   string   `koanf:"username"`
-	Credential string   `koanf:"credential"`
-	Secret string `koanf:"secret"`
-	CredentialTTL int `koanf:"credential_ttl"`
+	URLs          []string `koanf:"urls"`
+	Username      string   `koanf:"username"`
+	Credential    string   `koanf:"credential"`
+	Secret        string   `koanf:"secret"`
+	CredentialTTL int      `koanf:"credential_ttl"`
 }
 
 func (s ICEServerConfig) ResolveCredentials(now time.Time) (username, credential string) {
@@ -57,10 +57,14 @@ func (s ICEServerConfig) ResolveCredentials(now time.Time) (username, credential
 		return s.Username, s.Credential
 	}
 	ttl := s.CredentialTTL
-	if ttl <= 0 { ttl = defaultTURNCredentialTTLSecs }
+	if ttl <= 0 {
+		ttl = defaultTURNCredentialTTLSecs
+	}
 	expiry := now.Add(time.Duration(ttl) * time.Second).Unix()
 	username = strconv.FormatInt(expiry, 10)
-	if s.Username != "" { username = username + ":" + s.Username }
+	if s.Username != "" {
+		username = username + ":" + s.Username
+	}
 	mac := hmac.New(sha1.New, []byte(s.Secret))
 	mac.Write([]byte(username))
 	credential = base64.StdEncoding.EncodeToString(mac.Sum(nil))
@@ -82,63 +86,201 @@ type CallingConfig struct {
 	RecordingEnabled    bool              `koanf:"recording_enabled"`
 }
 
-type AppConfig struct { Name string `koanf:"name"`; Environment string `koanf:"environment"`; Debug bool `koanf:"debug"`; EncryptionKey string `koanf:"encryption_key"` }
-type ServerConfig struct { Host string `koanf:"host"`; Port int `koanf:"port"`; ReadTimeout int `koanf:"read_timeout"`; WriteTimeout int `koanf:"write_timeout"`; BasePath string `koanf:"base_path"`; AllowedOrigins string `koanf:"allowed_origins"` }
-type DatabaseConfig struct { Host string `koanf:"host"`; Port int `koanf:"port"`; User string `koanf:"user"`; Password string `koanf:"password"`; Name string `koanf:"name"`; SSLMode string `koanf:"ssl_mode"`; MaxOpenConns int `koanf:"max_open_conns"`; MaxIdleConns int `koanf:"max_idle_conns"`; ConnMaxLifetime int `koanf:"conn_max_lifetime"` }
-type RedisConfig struct { Host string `koanf:"host"`; Port int `koanf:"port"`; Username string `koanf:"username"`; Password string `koanf:"password"`; DB int `koanf:"db"`; TLS bool `koanf:"tls"` }
-type JWTConfig struct { Secret string `koanf:"secret"`; AccessExpiryMins int `koanf:"access_expiry_mins"`; RefreshExpiryDays int `koanf:"refresh_expiry_days"` }
-type WhatsAppConfig struct { WebhookVerifyToken string `koanf:"webhook_verify_token"`; APIVersion string `koanf:"api_version"`; BaseURL string `koanf:"base_url"`; AppID string `koanf:"app_id"`; AppSecret string `koanf:"app_secret"`; ConfigID string `koanf:"config_id"` }
-type AIConfig struct { OpenAIKey string `koanf:"openai_key"`; AnthropicKey string `koanf:"anthropic_key"`; GoogleKey string `koanf:"google_key"` }
-type StorageConfig struct { Type string `koanf:"type"`; LocalPath string `koanf:"local_path"`; S3Bucket string `koanf:"s3_bucket"`; S3Region string `koanf:"s3_region"`; S3Key string `koanf:"s3_key"`; S3Secret string `koanf:"s3_secret"` }
-type DefaultAdminConfig struct { Email string `koanf:"email"`; Password string `koanf:"password"`; FullName string `koanf:"full_name"` }
-type CookieConfig struct { Domain string `koanf:"domain"`; Secure bool `koanf:"secure"` }
-type RateLimitConfig struct { Enabled bool `koanf:"enabled"`; LoginMaxAttempts int `koanf:"login_max_attempts"`; RegisterMaxAttempts int `koanf:"register_max_attempts"`; RefreshMaxAttempts int `koanf:"refresh_max_attempts"`; SSOMaxAttempts int `koanf:"sso_max_attempts"`; WindowSeconds int `koanf:"window_seconds"`; TrustProxy bool `koanf:"trust_proxy"`; APIMaxRequests int `koanf:"api_max_requests"`; APIWindowSeconds int `koanf:"api_window_seconds"` }
+type AppConfig struct {
+	Name          string `koanf:"name"`
+	Environment   string `koanf:"environment"`
+	Debug         bool   `koanf:"debug"`
+	EncryptionKey string `koanf:"encryption_key"`
+}
+type ServerConfig struct {
+	Host           string `koanf:"host"`
+	Port           int    `koanf:"port"`
+	ReadTimeout    int    `koanf:"read_timeout"`
+	WriteTimeout   int    `koanf:"write_timeout"`
+	BasePath       string `koanf:"base_path"`
+	AllowedOrigins string `koanf:"allowed_origins"`
+}
+type DatabaseConfig struct {
+	Host            string `koanf:"host"`
+	Port            int    `koanf:"port"`
+	User            string `koanf:"user"`
+	Password        string `koanf:"password"`
+	Name            string `koanf:"name"`
+	SSLMode         string `koanf:"ssl_mode"`
+	MaxOpenConns    int    `koanf:"max_open_conns"`
+	MaxIdleConns    int    `koanf:"max_idle_conns"`
+	ConnMaxLifetime int    `koanf:"conn_max_lifetime"`
+}
+type RedisConfig struct {
+	Host     string `koanf:"host"`
+	Port     int    `koanf:"port"`
+	Username string `koanf:"username"`
+	Password string `koanf:"password"`
+	DB       int    `koanf:"db"`
+	TLS      bool   `koanf:"tls"`
+}
+type JWTConfig struct {
+	Secret            string `koanf:"secret"`
+	AccessExpiryMins  int    `koanf:"access_expiry_mins"`
+	RefreshExpiryDays int    `koanf:"refresh_expiry_days"`
+}
+type WhatsAppConfig struct {
+	WebhookVerifyToken string `koanf:"webhook_verify_token"`
+	APIVersion         string `koanf:"api_version"`
+	BaseURL            string `koanf:"base_url"`
+	AppID              string `koanf:"app_id"`
+	AppSecret          string `koanf:"app_secret"`
+	ConfigID           string `koanf:"config_id"`
+}
+type AIConfig struct {
+	OpenAIKey    string `koanf:"openai_key"`
+	AnthropicKey string `koanf:"anthropic_key"`
+	GoogleKey    string `koanf:"google_key"`
+}
+type StorageConfig struct {
+	Type      string `koanf:"type"`
+	LocalPath string `koanf:"local_path"`
+	S3Bucket  string `koanf:"s3_bucket"`
+	S3Region  string `koanf:"s3_region"`
+	S3Key     string `koanf:"s3_key"`
+	S3Secret  string `koanf:"s3_secret"`
+}
+type DefaultAdminConfig struct {
+	Email    string `koanf:"email"`
+	Password string `koanf:"password"`
+	FullName string `koanf:"full_name"`
+}
+type CookieConfig struct {
+	Domain string `koanf:"domain"`
+	Secure bool   `koanf:"secure"`
+}
+type RateLimitConfig struct {
+	Enabled             bool `koanf:"enabled"`
+	LoginMaxAttempts    int  `koanf:"login_max_attempts"`
+	RegisterMaxAttempts int  `koanf:"register_max_attempts"`
+	RefreshMaxAttempts  int  `koanf:"refresh_max_attempts"`
+	SSOMaxAttempts      int  `koanf:"sso_max_attempts"`
+	WindowSeconds       int  `koanf:"window_seconds"`
+	TrustProxy          bool `koanf:"trust_proxy"`
+	APIMaxRequests      int  `koanf:"api_max_requests"`
+	APIWindowSeconds    int  `koanf:"api_window_seconds"`
+}
 
 func Load(configPath string) (*Config, error) {
 	k := koanf.New(".")
 	if configPath != "" {
-		if err := k.Load(file.Provider(configPath), toml.Parser()); err != nil { return nil, err }
+		if err := k.Load(file.Provider(configPath), toml.Parser()); err != nil {
+			return nil, err
+		}
 	}
 	if err := k.Load(env.Provider("WHATOMATE_", ".", func(s string) string {
 		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, "WHATOMATE_")), "__", ".")
-	}), nil); err != nil { return nil, err }
+	}), nil); err != nil {
+		return nil, err
+	}
 	var cfg Config
-	if err := k.Unmarshal("", &cfg); err != nil { return nil, err }
+	if err := k.Unmarshal("", &cfg); err != nil {
+		return nil, err
+	}
 	setDefaults(&cfg)
 	return &cfg, nil
 }
 
 func setDefaults(cfg *Config) {
-	if cfg.App.Name == "" { cfg.App.Name = "Whatomate" }
-	if cfg.App.Environment == "" { cfg.App.Environment = "development" }
-	if cfg.Server.Host == "" { cfg.Server.Host = "0.0.0.0" }
-	if cfg.Server.Port == 0 { cfg.Server.Port = 8080 }
-	if cfg.Server.ReadTimeout == 0 { cfg.Server.ReadTimeout = 30 }
-	if cfg.Server.WriteTimeout == 0 { cfg.Server.WriteTimeout = 30 }
-	if cfg.Database.Port == 0 { cfg.Database.Port = 5432 }
-	if cfg.Database.SSLMode == "" { cfg.Database.SSLMode = "disable" }
-	if cfg.Database.MaxOpenConns == 0 { cfg.Database.MaxOpenConns = 25 }
-	if cfg.Database.MaxIdleConns == 0 { cfg.Database.MaxIdleConns = 5 }
-	if cfg.Database.ConnMaxLifetime == 0 { cfg.Database.ConnMaxLifetime = 300 }
-	if cfg.Redis.Port == 0 { cfg.Redis.Port = 6379 }
-	if cfg.JWT.AccessExpiryMins == 0 { cfg.JWT.AccessExpiryMins = 15 }
-	if cfg.JWT.RefreshExpiryDays == 0 { cfg.JWT.RefreshExpiryDays = 1 }
-	if cfg.WhatsApp.APIVersion == "" { cfg.WhatsApp.APIVersion = "v18.0" }
-	if cfg.WhatsApp.BaseURL == "" { cfg.WhatsApp.BaseURL = "https://graph.facebook.com" }
-	if cfg.Storage.Type == "" { cfg.Storage.Type = "local" }
-	if cfg.Storage.LocalPath == "" { cfg.Storage.LocalPath = "./uploads" }
-	if cfg.DefaultAdmin.Email == "" { cfg.DefaultAdmin.Email = "admin@admin.com" }
-	if cfg.DefaultAdmin.Password == "" { cfg.DefaultAdmin.Password = "admin" }
-	if cfg.DefaultAdmin.FullName == "" { cfg.DefaultAdmin.FullName = "Admin" }
-	if cfg.App.Environment == "production" { cfg.Cookie.Secure = true }
-	if cfg.RateLimit.LoginMaxAttempts == 0 { cfg.RateLimit.LoginMaxAttempts = 10 }
-	if cfg.RateLimit.RegisterMaxAttempts == 0 { cfg.RateLimit.RegisterMaxAttempts = 10 }
-	if cfg.RateLimit.RefreshMaxAttempts == 0 { cfg.RateLimit.RefreshMaxAttempts = 30 }
-	if cfg.RateLimit.SSOMaxAttempts == 0 { cfg.RateLimit.SSOMaxAttempts = 10 }
-	if cfg.RateLimit.WindowSeconds == 0 { cfg.RateLimit.WindowSeconds = 60 }
-	if cfg.Calling.MaxCallDuration == 0 { cfg.Calling.MaxCallDuration = 300 }
-	if cfg.Calling.AudioDir == "" { cfg.Calling.AudioDir = "./audio" }
-	if cfg.Calling.HoldMusicFile == "" { cfg.Calling.HoldMusicFile = "hold_music.opus" }
-	if cfg.Calling.TransferTimeoutSecs == 0 { cfg.Calling.TransferTimeoutSecs = 120 }
-	if cfg.TTS.ModelDir == "" && cfg.TTS.PiperModel != "" { cfg.TTS.ModelDir = filepath.Dir(cfg.TTS.PiperModel) }
+	if cfg.App.Name == "" {
+		cfg.App.Name = "Whatomate"
+	}
+	if cfg.App.Environment == "" {
+		cfg.App.Environment = "development"
+	}
+	if cfg.Server.Host == "" {
+		cfg.Server.Host = "0.0.0.0"
+	}
+	if cfg.Server.Port == 0 {
+		cfg.Server.Port = 8080
+	}
+	if cfg.Server.ReadTimeout == 0 {
+		cfg.Server.ReadTimeout = 30
+	}
+	if cfg.Server.WriteTimeout == 0 {
+		cfg.Server.WriteTimeout = 30
+	}
+	if cfg.Database.Port == 0 {
+		cfg.Database.Port = 5432
+	}
+	if cfg.Database.SSLMode == "" {
+		cfg.Database.SSLMode = "disable"
+	}
+	if cfg.Database.MaxOpenConns == 0 {
+		cfg.Database.MaxOpenConns = 25
+	}
+	if cfg.Database.MaxIdleConns == 0 {
+		cfg.Database.MaxIdleConns = 5
+	}
+	if cfg.Database.ConnMaxLifetime == 0 {
+		cfg.Database.ConnMaxLifetime = 300
+	}
+	if cfg.Redis.Port == 0 {
+		cfg.Redis.Port = 6379
+	}
+	if cfg.JWT.AccessExpiryMins == 0 {
+		cfg.JWT.AccessExpiryMins = 15
+	}
+	if cfg.JWT.RefreshExpiryDays == 0 {
+		cfg.JWT.RefreshExpiryDays = 1
+	}
+	if cfg.WhatsApp.APIVersion == "" {
+		cfg.WhatsApp.APIVersion = "v18.0"
+	}
+	if cfg.WhatsApp.BaseURL == "" {
+		cfg.WhatsApp.BaseURL = "https://graph.facebook.com"
+	}
+	if cfg.Storage.Type == "" {
+		cfg.Storage.Type = "local"
+	}
+	if cfg.Storage.LocalPath == "" {
+		cfg.Storage.LocalPath = "./uploads"
+	}
+	if cfg.DefaultAdmin.Email == "" {
+		cfg.DefaultAdmin.Email = "admin@admin.com"
+	}
+	if cfg.DefaultAdmin.Password == "" {
+		cfg.DefaultAdmin.Password = "admin"
+	}
+	if cfg.DefaultAdmin.FullName == "" {
+		cfg.DefaultAdmin.FullName = "Admin"
+	}
+	if cfg.App.Environment == "production" {
+		cfg.Cookie.Secure = true
+	}
+	if cfg.RateLimit.LoginMaxAttempts == 0 {
+		cfg.RateLimit.LoginMaxAttempts = 10
+	}
+	if cfg.RateLimit.RegisterMaxAttempts == 0 {
+		cfg.RateLimit.RegisterMaxAttempts = 10
+	}
+	if cfg.RateLimit.RefreshMaxAttempts == 0 {
+		cfg.RateLimit.RefreshMaxAttempts = 30
+	}
+	if cfg.RateLimit.SSOMaxAttempts == 0 {
+		cfg.RateLimit.SSOMaxAttempts = 10
+	}
+	if cfg.RateLimit.WindowSeconds == 0 {
+		cfg.RateLimit.WindowSeconds = 60
+	}
+	if cfg.Calling.MaxCallDuration == 0 {
+		cfg.Calling.MaxCallDuration = 300
+	}
+	if cfg.Calling.AudioDir == "" {
+		cfg.Calling.AudioDir = "./audio"
+	}
+	if cfg.Calling.HoldMusicFile == "" {
+		cfg.Calling.HoldMusicFile = "hold_music.opus"
+	}
+	if cfg.Calling.TransferTimeoutSecs == 0 {
+		cfg.Calling.TransferTimeoutSecs = 120
+	}
+	if cfg.TTS.ModelDir == "" && cfg.TTS.PiperModel != "" {
+		cfg.TTS.ModelDir = filepath.Dir(cfg.TTS.PiperModel)
+	}
 }

@@ -36,8 +36,8 @@ func (a *App) GetTTSSettings(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list TTS models: "+err.Error(), nil, "")
 	}
 	return r.SendEnvelope(map[string]any{
-		"settings": a.TTS.GetSettings(),
-		"models": modelsList,
+		"settings":  a.TTS.GetSettings(),
+		"models":    modelsList,
 		"model_dir": a.Config.TTS.ModelDir,
 	})
 }
@@ -171,9 +171,9 @@ func (a *App) PreviewTTS(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Preview text is limited to 500 characters", nil, "")
 	}
 	config := map[string]any{
-		"tts_model": req.Model,
-		"tts_language": req.Language,
-		"tts_number_mode": req.NumberMode,
+		"tts_model":        req.Model,
+		"tts_language":     req.Language,
+		"tts_number_mode":  req.NumberMode,
 		"tts_length_scale": req.LengthScale,
 	}
 	filename, err := a.TTS.GenerateWithConfig(req.Text, config)

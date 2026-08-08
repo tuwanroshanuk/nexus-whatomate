@@ -245,6 +245,8 @@ func runServer(args []string) {
 		app.TTS = &tts.PiperTTS{
 			BinaryPath:    cfg.TTS.PiperBinary,
 			ModelPath:     cfg.TTS.PiperModel,
+			ModelDir:      cfg.TTS.ModelDir,
+			SettingsPath:  cfg.TTS.SettingsPath,
 			OpusencBinary: cfg.TTS.OpusencBinary,
 			AudioDir:      cfg.Calling.AudioDir,
 		}
@@ -829,6 +831,12 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.DELETE("/api/custom-actions/{id}", app.DeleteCustomAction)
 	g.POST("/api/custom-actions/{id}/execute", app.ExecuteCustomAction)
 	g.GET("/api/custom-actions/redirect/{token}", app.CustomActionRedirect)
+
+	// TTS settings and Piper voice management
+	g.GET("/api/tts/settings", app.GetTTSSettings)
+	g.PUT("/api/tts/settings", app.UpdateTTSSettings)
+	g.POST("/api/tts/models/download", app.DownloadTTSModel)
+	g.POST("/api/tts/preview", app.PreviewTTS)
 
 	// IVR Flows
 	g.GET("/api/ivr-flows", app.ListIVRFlows)

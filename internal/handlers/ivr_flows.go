@@ -921,7 +921,7 @@ func (a *App) generateIVRAudio(menu models.JSONB) error {
 			nodesSlice[i] = nodeMap
 			continue
 		}
-		filename, err := a.TTS.Generate(greetingText)
+		filename, err := a.TTS.GenerateWithConfig(greetingText, config)
 		if err != nil {
 			return err
 		}

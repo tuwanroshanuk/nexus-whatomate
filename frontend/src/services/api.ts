@@ -1239,6 +1239,31 @@ export const callTransfersService = {
     api.post<{ status: string }>('/call-transfers/initiate', data),
 }
 
+export interface TTSSettings {
+  default_model: string
+  default_language: string
+  number_mode: 'natural' | 'phone_digits' | 'all_digits'
+  length_scale: number
+}
+
+export interface TTSModelInfo {
+  file: string
+  name: string
+  language: string
+  size: number
+  has_config: boolean
+  is_default: boolean
+}
+
+export const ttsService = {
+  getSettings: () => api.get<{ settings: TTSSettings; models: TTSModelInfo[]; model_dir: string }>('/tts/settings'),
+  updateSettings: (settings: TTSSettings) => api.put<TTSSettings>('/tts/settings', settings),
+  downloadModel: (data: { name: string; model_url: string; config_url?: string }) =>
+    api.post<TTSModelInfo>('/tts/models/download', data, { timeout: 5 * 60 * 1000 }),
+  preview: (data: { text: string; model?: string; language?: string; number_mode?: string; length_scale?: number }) =>
+    api.post<{ filename: string }>('/tts/preview', data, { timeout: 90 * 1000 }),
+}
+
 export const ivrFlowsService = {
   list: (params?: { search?: string; page?: number; limit?: number }) =>
     api.get<{ ivr_flows: IVRFlow[]; total: number }>('/ivr-flows', { params }),

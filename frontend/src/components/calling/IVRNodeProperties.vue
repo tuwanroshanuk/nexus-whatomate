@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue' 
 import type { IVRNode, IVRNodeType, IVRVariableDefinition, IVRHTTPDiscoveredVariable } from '@/services/api'
-import { ivrFlowsService } from '@/services/api'
+import { ivrFlowsService, ttsService, type TTSModelInfo, type TTSSettings } from '@/services/api' 
 import { useCallingStore } from '@/stores/calling'
 import { useTeamsStore } from '@/stores/teams'
 import { Input } from '@/components/ui/input'
@@ -32,6 +32,22 @@ const teamsStore = useTeamsStore()
 if (teamsStore.teams.length === 0) teamsStore.fetchTeams()
 
 const config = computed(() => props.node.config || {})
+
+const ttsModels = ref<TTSModelInfo[]>([])
+const ttsDefaults = ref<TTSSettings | null>(null)
+
+async function loadTTSOptions() {
+  try {
+    const res = await ttsService.getSettings()
+    const data = (res.data as any)?.data || res.data
+    ttsModels.value = data.models || []
+    ttsDefaults.value = data.settings || null
+  } catch {
+    // TTS can be disabled server-side; keep the normal audio editor usable.
+  }
+}
+
+onMounted(loadTTSOptions)
 
 function updateConfig(key: string, value: any) {
   emit('update:node', {
@@ -495,6 +511,49 @@ const greetingTab = computed(() =>
             :maxlength="500"
           />
           <IVRVariablePicker :variables="availableVariables" @select="insertVariableIntoTTS" />
+          <div class="rounded-lg border p-2.5 space-y-2 bg-muted/20">
+            <div class="text-[11px] font-medium">TTS Options <span class="text-muted-foreground font-normal">(optional overrides)</span></div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="space-y-1">
+                <Label class="text-[10px]">Voice model</Label>
+                <Select :model-value="config.tts_model || '__global__'" @update:model-value="(v: any) => updateConfig('tts_model', v === '__global__' ? '' : v)">
+                  <SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__global__">Global default{{ ttsDefaults?.default_model ? ` · ${ttsDefaults.default_model}` : '' }}</SelectItem>
+                    <SelectItem v-for="model in ttsModels" :key="model.file" :value="model.file">{{ model.name }}{{ model.language ? ` · ${model.language}` : '' }}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div class="space-y-1">
+                <Label class="text-[10px]">Number pronunciation</Label>
+                <Select :model-value="config.tts_number_mode || '__global__'" @update:model-value="(v: any) => updateConfig('tts_number_mode', v === '__global__' ? '' : v)">
+                  <SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__global__">Global default</SelectItem>
+                    <SelectItem value="natural">Natural numbers</SelectItem>
+                    <SelectItem value="phone_digits">Phone numbers digit-by-digit</SelectItem>
+                    <SelectItem value="all_digits">All numbers digit-by-digit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="space-y-1">
+                <Label class="text-[10px]">Language / locale</Label>
+                <Select :model-value="config.tts_language || '__global__'" @update:model-value="(v: any) => updateConfig('tts_language', v === '__global__' ? '' : v)">
+                  <SelectTrigger class="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__global__">Global default</SelectItem><SelectItem value="auto">Auto</SelectItem><SelectItem value="en">English</SelectItem><SelectItem value="si">Sinhala</SelectItem><SelectItem value="ta">Tamil</SelectItem><SelectItem value="hi">Hindi</SelectItem><SelectItem value="es">Spanish</SelectItem><SelectItem value="de">German</SelectItem><SelectItem value="ja">Japanese</SelectItem><SelectItem value="ko">Korean</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div class="space-y-1">
+                <Label class="text-[10px]">Length scale</Label>
+                <Input type="number" min="0.5" max="2" step="0.05" :model-value="String(config.tts_length_scale || '')" @update:model-value="(v: string) => updateConfig('tts_length_scale', v ? Number(v) : 0)" :placeholder="ttsDefaults ? `Global ${ttsDefaults.length_scale}` : 'Global'" class="h-7 text-xs" />
+              </div>
+            </div>
+            <p class="text-[10px] text-muted-foreground">Phone digit mode turns 94741682210 into 9, 4, 7, 4, 1, 6, 8, 2, 2, 1, 0 before Piper speaks it.</p>
+          </div>
           <div v-if="usedTTSVariables.length" class="flex flex-wrap gap-1">
             <span
               v-for="variable in usedTTSVariables"

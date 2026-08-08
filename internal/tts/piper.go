@@ -34,12 +34,12 @@ type Settings struct {
 
 // ModelInfo describes one installed Piper .onnx voice.
 type ModelInfo struct {
-	File       string `json:"file"`
-	Name       string `json:"name"`
-	Language   string `json:"language"`
-	Size       int64  `json:"size"`
-	HasConfig  bool   `json:"has_config"`
-	IsDefault  bool   `json:"is_default"`
+	File      string `json:"file"`
+	Name      string `json:"name"`
+	Language  string `json:"language"`
+	Size      int64  `json:"size"`
+	HasConfig bool   `json:"has_config"`
+	IsDefault bool   `json:"is_default"`
 }
 
 // PiperTTS generates OGG/Opus audio files from text using the Piper TTS CLI
@@ -195,7 +195,7 @@ func (p *PiperTTS) ListModels() ([]ModelInfo, error) {
 			models = append(models, ModelInfo{
 				File: base, Name: strings.TrimSuffix(base, filepath.Ext(base)),
 				Language: readModelLanguage(p.ModelPath + ".json"),
-				Size: info.Size(), HasConfig: fileExists(p.ModelPath + ".json"),
+				Size:     info.Size(), HasConfig: fileExists(p.ModelPath + ".json"),
 				IsDefault: base == settings.DefaultModel,
 			})
 		}

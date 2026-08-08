@@ -82,6 +82,8 @@ api_window_seconds = 60        # Time window for global API rate limit (0 = 60)
 [tts]
 # piper_binary = "/usr/local/bin/piper"
 # piper_model = "/opt/piper/models/en_US-lessac-medium.onnx"
+# model_dir = "/opt/piper/models"       # mount this directory persistently to keep downloaded voices
+# settings_path = "/opt/piper/models/.whatomate-tts-settings.json"
 # opusenc_binary = "opusenc"  # defaults to finding in PATH
 
 # WhatsApp Calling / WebRTC
