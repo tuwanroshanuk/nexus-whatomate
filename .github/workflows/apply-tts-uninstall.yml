@@ -43,3 +43,4 @@ jobs:
           git add -A
           git commit -m "Add safe TTS model uninstall and disk cleanup"
           git push origin HEAD:main
+# trigger
