@@ -27,6 +27,8 @@ jobs:
         run: python .github/scripts/apply_tts_providers.py
       - name: Normalize generated Go before Cloud extension
         run: gofmt -w internal/tts/piper.go internal/tts/providers.go internal/handlers/tts_settings.go internal/handlers/tts_providers.go cmd/whatomate/main.go
+      - name: Preserve existing model uninstall routes
+        run: python .github/scripts/fix_tts_provider_routes.py
       - name: Add Google Cloud TTS voice tiers
         run: python .github/scripts/extend_tts_google_cloud.py
       - name: Add primary-language UX
@@ -55,7 +57,7 @@ jobs:
         run: npm run build
       - name: Commit implementation
         run: |
-          rm -f .github/scripts/apply_tts_providers.py .github/scripts/extend_tts_google_cloud.py .github/scripts/refine_tts_primary_languages.py .github/workflows/apply-tts-providers.yml
+          rm -f .github/scripts/apply_tts_providers.py .github/scripts/extend_tts_google_cloud.py .github/scripts/refine_tts_primary_languages.py .github/scripts/fix_tts_provider_routes.py .github/workflows/apply-tts-providers.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
