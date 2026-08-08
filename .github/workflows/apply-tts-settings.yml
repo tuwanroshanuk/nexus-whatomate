@@ -1,5 +1,6 @@
 name: Apply extended TTS settings
 
+# retry-3: whitespace-tolerant patch runner
 on:
   push:
     paths:
