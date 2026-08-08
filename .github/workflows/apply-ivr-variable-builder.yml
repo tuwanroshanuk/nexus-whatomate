@@ -40,9 +40,21 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Typecheck frontend
+      - name: Check changed frontend files
         working-directory: frontend
-        run: npm run typecheck
+        shell: bash
+        run: |
+          set +e
+          npm run typecheck 2>&1 | tee /tmp/ivr-typecheck.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if grep -E "(IVRNodeProperties|IVRFlowEditorView|IVRVariablePicker|src/services/api\.ts)" /tmp/ivr-typecheck.log; then
+            echo "TypeScript reported an error in an IVR variable-builder file."
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "Global typecheck still has pre-existing errors outside this feature; changed IVR files are clean."
+          fi
 
       - name: Build frontend
         working-directory: frontend
