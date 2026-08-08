@@ -440,7 +440,16 @@ func (m *Manager) executeHTTPCallback(session *CallSession, node *IVRNode, ctx *
 	}
 
 	if responseStoreAs != "" {
+		// Preserve the raw response for backwards compatibility.
 		ctx.Variables[responseStoreAs] = result.Body
+
+		// JSON responses are additionally flattened into dot-path variables so
+		// downstream IVR nodes can reference values such as
+		// {{accountInfo.profile.name}} and {{accountInfo.projects.0.name}}.
+		var parsed any
+		if err := json.Unmarshal([]byte(result.Body), &parsed); err == nil {
+			flattenJSONVariables(responseStoreAs, parsed, ctx.Variables)
+		}
 	}
 
 	m.log.Info("HTTP callback completed", "call_id", session.ID, "url", url, "status", result.StatusCode)
@@ -449,6 +458,34 @@ func (m *Manager) executeHTTPCallback(session *CallSession, node *IVRNode, ctx *
 		return "http:2xx"
 	}
 	return "http:non2xx"
+}
+
+// flattenJSONVariables exposes primitive JSON leaves as dot-path IVR variables.
+// Arrays use numeric path segments (for example projects.0.name). The raw HTTP
+// response remains stored under response_store_as by executeHTTPCallback.
+func flattenJSONVariables(prefix string, value any, vars map[string]string) {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, child := range v {
+			childPrefix := key
+			if prefix != "" {
+				childPrefix = prefix + "." + key
+			}
+			flattenJSONVariables(childPrefix, child, vars)
+		}
+	case []any:
+		for i, child := range v {
+			flattenJSONVariables(fmt.Sprintf("%s.%d", prefix, i), child, vars)
+		}
+	case string:
+		vars[prefix] = v
+	case float64, bool:
+		vars[prefix] = fmt.Sprint(v)
+	case nil:
+		vars[prefix] = ""
+	default:
+		vars[prefix] = fmt.Sprint(v)
+	}
 }
 
 // executeTransfer routes the call to an agent team. If the transfer node has

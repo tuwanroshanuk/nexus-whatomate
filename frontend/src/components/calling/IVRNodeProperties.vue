@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { IVRNode, IVRNodeType } from '@/services/api'
+import { computed, ref, watch } from 'vue'
+import type { IVRNode, IVRNodeType, IVRVariableDefinition, IVRHTTPDiscoveredVariable } from '@/services/api'
 import { ivrFlowsService } from '@/services/api'
 import { useCallingStore } from '@/stores/calling'
 import { useTeamsStore } from '@/stores/teams'
@@ -11,12 +11,14 @@ import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Trash2, Plus, Upload, Play, Pause, X, Loader2, Type } from 'lucide-vue-next'
+import { Trash2, Plus, Upload, Play, Pause, X, Loader2, Type, FlaskConical } from 'lucide-vue-next'
+import IVRVariablePicker from '@/components/calling/IVRVariablePicker.vue'
 import { toast } from 'vue-sonner'
 
 const props = defineProps<{
   node: IVRNode
   currentFlowId?: string
+  availableVariables?: IVRVariableDefinition[]
 }>()
 
 const emit = defineEmits<{
@@ -233,6 +235,127 @@ function updateCallbackHeaderValue(event: CallbackEvent, key: string, value: str
   updateCallbackField(event, 'headers', headers)
 }
 
+
+// Dynamic variable helpers ---------------------------------------------------
+const testVariableValues = ref<Record<string, string>>({})
+const isTestingHTTP = ref(false)
+
+watch(() => props.node.id, () => {
+  testVariableValues.value = {}
+})
+
+const availableVariables = computed(() => props.availableVariables || [])
+
+function templateVariables(text: string) {
+  const found = new Set<string>()
+  const re = /{{\s*([^{}]+?)\s*}}/g
+  let match: RegExpExecArray | null
+  while ((match = re.exec(text || '')) !== null) found.add(match[1].trim())
+  return Array.from(found)
+}
+
+const usedTTSVariables = computed(() => templateVariables(String(config.value.greeting_text || '')))
+
+const httpTemplateVariables = computed(() => {
+  const chunks = [String(config.value.url || ''), String(config.value.body_template || '')]
+  for (const value of Object.values(config.value.headers || {})) chunks.push(String(value || ''))
+  const found = new Set<string>()
+  for (const chunk of chunks) for (const name of templateVariables(chunk)) found.add(name)
+  return Array.from(found)
+})
+
+function insertTemplateVariable(current: string, path: string) {
+  const token = `{{${path}}}`
+  if (!current) return token
+  if (/\s$/.test(current)) return current + token
+  return current + ' ' + token
+}
+
+function insertVariableIntoTTS(variable: IVRVariableDefinition) {
+  const next = insertTemplateVariable(String(config.value.greeting_text || ''), variable.path)
+  updateConfigEntries({ greeting_text: next, audio_file: undefined })
+}
+
+function insertVariableIntoHTTPURL(variable: IVRVariableDefinition) {
+  updateConfig('url', insertTemplateVariable(String(config.value.url || ''), variable.path))
+}
+
+function insertVariableIntoHTTPBody(variable: IVRVariableDefinition) {
+  updateConfig('body_template', insertTemplateVariable(String(config.value.body_template || ''), variable.path))
+}
+
+function substituteTestVariables(text: string) {
+  return String(text || '').replace(/{{\s*([^{}]+?)\s*}}/g, (_full, name: string) => testVariableValues.value[name.trim()] ?? '')
+}
+
+function friendlyVariableLabel(path: string) {
+  const leaf = path.split('.').pop() || path
+  return leaf
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, c => c.toUpperCase())
+}
+
+const discoveredHTTPVariables = computed<IVRVariableDefinition[]>(() => {
+  const storeAs = String(config.value.response_store_as || '').trim()
+  if (!storeAs) return []
+  const schema = Array.isArray(config.value.response_schema) ? config.value.response_schema : []
+  return schema
+    .filter((item: IVRHTTPDiscoveredVariable) => !!item?.path)
+    .map((item: IVRHTTPDiscoveredVariable) => ({
+      path: `${storeAs}.${item.path}`,
+      label: friendlyVariableLabel(item.path),
+      source: props.node.label || 'HTTP Response',
+      type: item.type,
+    }))
+})
+
+async function testAndDiscoverHTTPVariables() {
+  const requestURL = String(config.value.url || '').trim()
+  const storeAs = String(config.value.response_store_as || '').trim()
+  if (!requestURL) {
+    toast.error('Enter an HTTP callback URL first')
+    return
+  }
+  if (!storeAs) {
+    toast.error('Set “Store Response As” before discovering variables')
+    return
+  }
+  for (const name of httpTemplateVariables.value) {
+    if (!String(testVariableValues.value[name] || '').trim()) {
+      toast.error(`Enter a test value for ${name}`)
+      return
+    }
+  }
+
+  isTestingHTTP.value = true
+  try {
+    const headers: Record<string, string> = {}
+    for (const [key, value] of Object.entries(config.value.headers || {})) {
+      if (String(key).trim()) headers[String(key)] = substituteTestVariables(String(value || ''))
+    }
+    const res = await ivrFlowsService.testHTTP({
+      url: substituteTestVariables(requestURL),
+      method: String(config.value.method || 'GET'),
+      headers,
+      body: substituteTestVariables(String(config.value.body_template || '')),
+      timeout_seconds: Number(config.value.timeout_seconds || 10),
+    })
+    const payload = (res.data as any)?.data || res.data
+    if (!payload?.is_json) {
+      toast.error(`HTTP ${payload?.status_code ?? ''}: response is not JSON`)
+      return
+    }
+    const schema = Array.isArray(payload.variables) ? payload.variables : []
+    updateConfig('response_schema', schema)
+    toast.success(`HTTP ${payload.status_code}: discovered ${schema.length} variables`)
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message || e?.message || 'HTTP test failed')
+  } finally {
+    isTestingHTTP.value = false
+  }
+}
+
 // Goto flow targets
 const gotoFlowTargets = computed(() =>
   callingStore.ivrFlows.filter(f => f.id !== props.currentFlowId)
@@ -294,14 +417,25 @@ const greetingTab = computed(() =>
             <input ref="audioFileInput" type="file" accept="audio/*" class="hidden" @change="handleFileSelect" />
           </div>
         </TabsContent>
-        <TabsContent value="text" class="mt-2">
+        <TabsContent value="text" class="mt-2 space-y-2">
           <Textarea
             :model-value="config.greeting_text || ''"
             @update:model-value="(v: string) => updateConfigEntries(v ? { greeting_text: v, audio_file: undefined } : { greeting_text: v })"
             placeholder="Enter text for TTS..."
-            class="min-h-[60px] text-xs resize-none"
+            class="min-h-[72px] text-xs resize-none"
             :maxlength="500"
           />
+          <IVRVariablePicker :variables="availableVariables" @select="insertVariableIntoTTS" />
+          <div v-if="usedTTSVariables.length" class="flex flex-wrap gap-1">
+            <span
+              v-for="variable in usedTTSVariables"
+              :key="variable"
+              class="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
+            >
+              {{ friendlyVariableLabel(variable) }}
+              <code class="ml-1 opacity-60">{{ variable }}</code>
+            </span>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
@@ -368,6 +502,7 @@ const greetingTab = computed(() =>
       <div class="space-y-1.5">
         <Label class="text-xs">URL</Label>
         <Input :model-value="config.url || ''" @update:model-value="(v: string) => updateConfig('url', v)" placeholder="https://api.example.com/ivr" class="h-8 text-xs font-mono" />
+        <IVRVariablePicker :variables="availableVariables" @select="insertVariableIntoHTTPURL" />
       </div>
       <div class="space-y-1.5">
         <Label class="text-xs">Method</Label>
@@ -397,6 +532,7 @@ const greetingTab = computed(() =>
       <div class="space-y-1.5">
         <Label class="text-xs">Body Template</Label>
         <Textarea :model-value="config.body_template || ''" @update:model-value="(v: string) => updateConfig('body_template', v)" placeholder='{"phone": "{{caller_phone}}"}' class="min-h-[60px] text-xs font-mono resize-none" />
+        <IVRVariablePicker :variables="availableVariables" @select="insertVariableIntoHTTPBody" />
       </div>
       <div class="space-y-1.5">
         <Label class="text-xs">Timeout (seconds)</Label>
@@ -405,6 +541,42 @@ const greetingTab = computed(() =>
       <div class="space-y-1.5">
         <Label class="text-xs">Store Response As (variable name)</Label>
         <Input :model-value="config.response_store_as || ''" @update:model-value="(v: string) => updateConfig('response_store_as', v)" placeholder="e.g. api_response" class="h-8 text-sm" />
+      </div>
+      <div class="space-y-2 rounded-lg border p-2.5 bg-muted/20">
+        <div>
+          <div class="text-xs font-medium">Discover Response Variables</div>
+          <p class="text-[10px] text-muted-foreground mt-0.5">Send a safe test request and turn JSON fields into visual flow variables. Test values are not saved.</p>
+        </div>
+        <div v-if="httpTemplateVariables.length" class="space-y-1.5">
+          <div v-for="name in httpTemplateVariables" :key="name" class="space-y-1">
+            <Label class="text-[10px]">Test value for <code>{{ name }}</code></Label>
+            <Input
+              :model-value="testVariableValues[name] || ''"
+              @update:model-value="(v: string) => testVariableValues[name] = v"
+              :placeholder="`Temporary ${name}`"
+              class="h-7 text-xs"
+            />
+          </div>
+        </div>
+        <Button type="button" variant="outline" size="sm" class="h-7 text-xs w-full" :disabled="isTestingHTTP" @click="testAndDiscoverHTTPVariables">
+          <Loader2 v-if="isTestingHTTP" class="h-3 w-3 animate-spin" />
+          <FlaskConical v-else class="h-3 w-3" />
+          {{ isTestingHTTP ? 'Testing…' : 'Test & Discover Variables' }}
+        </Button>
+        <div v-if="discoveredHTTPVariables.length" class="space-y-1.5">
+          <div class="text-[10px] text-muted-foreground">{{ discoveredHTTPVariables.length }} discovered variables</div>
+          <div class="flex flex-wrap gap-1 max-h-36 overflow-y-auto">
+            <span
+              v-for="variable in discoveredHTTPVariables"
+              :key="variable.path"
+              class="inline-flex max-w-full items-center rounded-full border bg-background px-2 py-0.5 text-[10px]"
+              :title="variable.path"
+            >
+              <span class="font-medium truncate">{{ variable.label }}</span>
+              <code class="ml-1 text-muted-foreground truncate">{{ variable.path }}</code>
+            </span>
+          </div>
+        </div>
       </div>
     </template>
 

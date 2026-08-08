@@ -1060,6 +1060,18 @@ export interface IVRNodePosition {
   y: number
 }
 
+export interface IVRVariableDefinition {
+  path: string
+  label: string
+  source: string
+  type?: string
+}
+
+export interface IVRHTTPDiscoveredVariable {
+  path: string
+  type: string
+}
+
 export interface IVRNode {
   id: string
   type: IVRNodeType
@@ -1236,6 +1248,8 @@ export const ivrFlowsService = {
   update: (id: string, data: { name?: string; description?: string; is_active?: boolean; is_call_start?: boolean; is_outgoing_end?: boolean; menu?: IVRFlowData; welcome_audio_url?: string }) =>
     api.put<IVRFlow>(`/ivr-flows/${id}`, data),
   delete: (id: string) => api.delete(`/ivr-flows/${id}`),
+  testHTTP: (data: { url: string; method: string; headers?: Record<string, string>; body?: string; timeout_seconds?: number }) =>
+    api.post<{ status_code: number; is_json: boolean; variables: IVRHTTPDiscoveredVariable[] }>('/ivr-flows/http-test', data),
   uploadAudio: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)

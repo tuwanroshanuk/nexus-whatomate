@@ -6,7 +6,7 @@ import { useVueFlow, MarkerType, type NodeMouseEvent, type Edge, type EdgeMouseE
 import FlowCanvas from '@/components/shared/FlowCanvas.vue'
 import { useCallingStore } from '@/stores/calling'
 import { useTeamsStore } from '@/stores/teams'
-import { ivrFlowsService, type IVRNode, type IVREdge, type IVRFlowData, type IVRNodeType } from '@/services/api'
+import { ivrFlowsService, type IVRNode, type IVREdge, type IVRFlowData, type IVRNodeType, type IVRVariableDefinition } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -362,6 +362,82 @@ const selectedIVRNode = computed<IVRNode | null>(() => {
   }
 })
 
+
+function friendlyVariableLabel(path: string) {
+  const leaf = path.split('.').pop() || path
+  return leaf
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, c => c.toUpperCase())
+}
+
+// Variables shown in the properties panel are flow-aware: only built-ins and
+// outputs from nodes that can reach the selected node are advertised.
+const selectedAvailableVariables = computed<IVRVariableDefinition[]>(() => {
+  const selected = selectedNode.value
+  const vars: IVRVariableDefinition[] = [
+    { path: 'caller_phone', label: 'Caller Phone', source: 'Built-in', type: 'string' },
+    { path: 'call_id', label: 'Call ID', source: 'Built-in', type: 'string' },
+  ]
+  if (!selected) return vars
+
+  const incoming = new Map<string, string[]>()
+  for (const edge of edges.value) {
+    const list = incoming.get(edge.target) || []
+    list.push(edge.source)
+    incoming.set(edge.target, list)
+  }
+
+  const ancestors = new Set<string>()
+  const visit = (id: string) => {
+    for (const source of incoming.get(id) || []) {
+      if (ancestors.has(source)) continue
+      ancestors.add(source)
+      visit(source)
+    }
+  }
+  visit(selected.id)
+
+  for (const node of nodes.value) {
+    if (!ancestors.has(node.id)) continue
+    const cfg = (node.data?.config || {}) as Record<string, any>
+    const source = String(node.data?.label || node.type || 'Node')
+
+    if (node.type === 'gather') {
+      const storeAs = String(cfg.store_as || '').trim()
+      if (storeAs) vars.push({ path: storeAs, label: friendlyVariableLabel(storeAs), source, type: 'string' })
+    }
+
+    if (node.type === 'menu') {
+      vars.push({ path: `menu_${node.id}`, label: 'Selected Menu Digit', source, type: 'string' })
+      vars.push({ path: 'last_menu_digit', label: 'Last Menu Digit', source, type: 'string' })
+    }
+
+    if (node.type === 'http_callback') {
+      const storeAs = String(cfg.response_store_as || '').trim()
+      if (!storeAs) continue
+      vars.push({ path: storeAs, label: friendlyVariableLabel(storeAs), source, type: 'json' })
+      const schema = Array.isArray(cfg.response_schema) ? cfg.response_schema : []
+      for (const item of schema) {
+        if (!item?.path) continue
+        vars.push({
+          path: `${storeAs}.${item.path}`,
+          label: friendlyVariableLabel(String(item.path)),
+          source,
+          type: String(item.type || 'value'),
+        })
+      }
+    }
+  }
+
+  const seen = new Set<string>()
+  return vars.filter(variable => {
+    if (seen.has(variable.path)) return false
+    seen.add(variable.path)
+    return true
+  })
+})
+
 // Load flow data from server
 async function loadFlow() {
   loading.value = true
@@ -479,6 +555,7 @@ onMounted(() => {
           <IVRNodeProperties
             :node="selectedIVRNode"
             :current-flow-id="flowId"
+            :available-variables="selectedAvailableVariables"
             @update:node="onUpdateNode"
             @delete="requestDeleteSelectedNode"
           />

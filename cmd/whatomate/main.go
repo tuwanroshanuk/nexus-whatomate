@@ -832,6 +832,8 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// IVR Flows
 	g.GET("/api/ivr-flows", app.ListIVRFlows)
+	// Keep this static route before /{id} so "http-test" is not parsed as a flow ID.
+	g.POST("/api/ivr-flows/http-test", app.TestIVRHTTPCallback)
 	g.GET("/api/ivr-flows/{id}", app.GetIVRFlow)
 	g.POST("/api/ivr-flows", app.CreateIVRFlow)
 	g.PUT("/api/ivr-flows/{id}", app.UpdateIVRFlow)

@@ -2,13 +2,18 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/models"
@@ -27,6 +32,133 @@ type IVRFlowRequest struct {
 	IsOutgoingEnd   bool         `json:"is_outgoing_end"`
 	Menu            models.JSONB `json:"menu"`
 	WelcomeAudioURL string       `json:"welcome_audio_url"`
+}
+
+// IVRHTTPTestRequest is a transient request used by the visual flow builder to
+// discover the shape of an HTTP callback response. Test values are never saved.
+type IVRHTTPTestRequest struct {
+	URL            string            `json:"url"`
+	Method         string            `json:"method"`
+	Headers        map[string]string `json:"headers"`
+	Body           string            `json:"body"`
+	TimeoutSeconds int               `json:"timeout_seconds"`
+}
+
+type IVRHTTPDiscoveredVariable struct {
+	Path string `json:"path"`
+	Type string `json:"type"`
+}
+
+// TestIVRHTTPCallback executes an authenticated, SSRF-protected HTTP request and
+// returns only JSON schema paths/types. The response payload itself is not
+// persisted or returned, preventing customer sample data from being stored by
+// the flow designer.
+func (a *App) TestIVRHTTPCallback(r *fastglue.Request) error {
+	if _, _, err := a.requireAuth(r, models.ResourceIVRFlows, models.ActionWrite); err != nil {
+		return nil
+	}
+
+	var req IVRHTTPTestRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+	if a.HTTPClient == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "HTTP client is not configured", nil, "")
+	}
+
+	parsedURL, err := url.ParseRequestURI(strings.TrimSpace(req.URL))
+	if err != nil || parsedURL.Host == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "A valid HTTP or HTTPS URL is required", nil, "")
+	}
+
+	method := strings.ToUpper(strings.TrimSpace(req.Method))
+	if method == "" {
+		method = http.MethodGet
+	}
+	if method != http.MethodGet && method != http.MethodPost {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Only GET and POST are supported", nil, "")
+	}
+
+	timeoutSeconds := req.TimeoutSeconds
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 10
+	}
+	if timeoutSeconds > 30 {
+		timeoutSeconds = 30
+	}
+
+	ctx, cancel := context.WithTimeout(r.RequestCtx, time.Duration(timeoutSeconds)*time.Second)
+	defer cancel()
+
+	var body io.Reader
+	if method != http.MethodGet && req.Body != "" {
+		body = strings.NewReader(req.Body)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, method, parsedURL.String(), body)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Could not build test request", nil, "")
+	}
+	for key, value := range req.Headers {
+		if strings.TrimSpace(key) != "" {
+			httpReq.Header.Set(key, value)
+		}
+	}
+
+	resp, err := a.HTTPClient.Do(httpReq)
+	if err != nil {
+		a.Log.Warn("IVR HTTP test failed", "error", err, "url", parsedURL.String())
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "HTTP test request failed: "+err.Error(), nil, "")
+	}
+	defer resp.Body.Close()
+
+	const maxSchemaResponse = 1 << 20
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxSchemaResponse+1))
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Could not read HTTP test response", nil, "")
+	}
+	if len(data) > maxSchemaResponse {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "HTTP test response is too large (max 1 MiB)", nil, "")
+	}
+
+	variables := make([]IVRHTTPDiscoveredVariable, 0)
+	var parsed any
+	isJSON := json.Unmarshal(data, &parsed) == nil
+	if isJSON {
+		discoverIVRJSONVariables("", parsed, &variables)
+		sort.Slice(variables, func(i, j int) bool { return variables[i].Path < variables[j].Path })
+	}
+
+	return r.SendEnvelope(map[string]any{
+		"status_code": resp.StatusCode,
+		"is_json":     isJSON,
+		"variables":   variables,
+	})
+}
+
+func discoverIVRJSONVariables(prefix string, value any, out *[]IVRHTTPDiscoveredVariable) {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, child := range v {
+			childPrefix := key
+			if prefix != "" {
+				childPrefix = prefix + "." + key
+			}
+			discoverIVRJSONVariables(childPrefix, child, out)
+		}
+	case []any:
+		for i, child := range v {
+			childPrefix := fmt.Sprintf("%s.%d", prefix, i)
+			discoverIVRJSONVariables(childPrefix, child, out)
+		}
+	case string:
+		*out = append(*out, IVRHTTPDiscoveredVariable{Path: prefix, Type: "string"})
+	case float64:
+		*out = append(*out, IVRHTTPDiscoveredVariable{Path: prefix, Type: "number"})
+	case bool:
+		*out = append(*out, IVRHTTPDiscoveredVariable{Path: prefix, Type: "boolean"})
+	case nil:
+		*out = append(*out, IVRHTTPDiscoveredVariable{Path: prefix, Type: "null"})
+	}
 }
 
 // ListIVRFlows returns all IVR flows for the organization
