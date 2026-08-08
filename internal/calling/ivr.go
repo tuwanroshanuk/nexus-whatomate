@@ -144,7 +144,7 @@ func (m *Manager) executeNodeLoop(session *CallSession, waAccount *whatsapp.Acco
 
 		switch node.Type {
 		case IVRNodeGreeting:
-			outcome = m.executeGreeting(session, node, player)
+			outcome = m.executeGreeting(session, node, ctx, player)
 		case IVRNodeMenu:
 			outcome = m.executeMenu(session, node, ctx, player)
 		case IVRNodeGather:
@@ -228,8 +228,8 @@ func (m *Manager) executeNodeLoop(session *CallSession, waAccount *whatsapp.Acco
 // --- Node Executors ---
 
 // executeGreeting plays audio or TTS, returns "default".
-func (m *Manager) executeGreeting(session *CallSession, node *IVRNode, player *AudioPlayer) string {
-	audioFile, _ := node.Config["audio_file"].(string)
+func (m *Manager) executeGreeting(session *CallSession, node *IVRNode, ctx *IVRContext, player *AudioPlayer) string {
+	audioFile := m.resolveNodeAudioFile(node, ctx)
 	interruptible, _ := node.Config["interruptible"].(bool)
 
 	if audioFile != "" && m.config.AudioDir != "" {
@@ -256,7 +256,7 @@ func (m *Manager) executeGreeting(session *CallSession, node *IVRNode, player *A
 // Returns "digit:N" on valid input, "timeout" on single-attempt timeout,
 // or "max_retries" when all attempts are exhausted.
 func (m *Manager) executeMenu(session *CallSession, node *IVRNode, ctx *IVRContext, player *AudioPlayer) string {
-	audioFile, _ := node.Config["audio_file"].(string)
+	audioFile := m.resolveNodeAudioFile(node, ctx)
 	timeoutSecs := getConfigInt(node.Config, "timeout_seconds", 10)
 	maxRetries := getConfigInt(node.Config, "max_retries", 3)
 	timeout := time.Duration(timeoutSecs) * time.Second
@@ -330,7 +330,7 @@ func (m *Manager) executeMenu(session *CallSession, node *IVRNode, ctx *IVRConte
 
 // executeGather collects multi-digit input, stores in context.
 func (m *Manager) executeGather(session *CallSession, node *IVRNode, ctx *IVRContext, player *AudioPlayer) string {
-	audioFile, _ := node.Config["audio_file"].(string)
+	audioFile := m.resolveNodeAudioFile(node, ctx)
 	maxDigits := getConfigInt(node.Config, "max_digits", 10)
 	terminator, _ := node.Config["terminator"].(string)
 	if terminator == "" {
@@ -598,7 +598,7 @@ func (m *Manager) executeTiming(session *CallSession, node *IVRNode) string {
 
 // executeHangup plays optional goodbye audio and terminates the call. Terminal.
 func (m *Manager) executeHangup(session *CallSession, node *IVRNode, ctx *IVRContext, waAccount *whatsapp.Account, player *AudioPlayer) {
-	audioFile, _ := node.Config["audio_file"].(string)
+	audioFile := m.resolveNodeAudioFile(node, ctx)
 	if audioFile != "" && m.config.AudioDir != "" {
 		fullPath := filepath.Join(m.config.AudioDir, audioFile)
 		if _, err := player.PlayFile(fullPath); err != nil {

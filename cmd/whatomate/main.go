@@ -248,6 +248,7 @@ func runServer(args []string) {
 			OpusencBinary: cfg.TTS.OpusencBinary,
 			AudioDir:      cfg.Calling.AudioDir,
 		}
+		calling.SetRuntimeTTSGenerator(app.TTS)
 		lo.Info("TTS initialized", "piper", cfg.TTS.PiperBinary, "model", cfg.TTS.PiperModel)
 	}
 

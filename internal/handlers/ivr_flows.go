@@ -781,6 +781,14 @@ func (a *App) generateIVRAudio(menu models.JSONB) error {
 		if greetingText == "" {
 			continue
 		}
+		// Dynamic prompts depend on Gather/HTTP values that only exist while a
+		// call is running. Do not render placeholders literally at save time.
+		if strings.Contains(greetingText, "{{") {
+			delete(config, "audio_file")
+			nodeMap["config"] = config
+			nodesSlice[i] = nodeMap
+			continue
+		}
 		filename, err := a.TTS.Generate(greetingText)
 		if err != nil {
 			return err
