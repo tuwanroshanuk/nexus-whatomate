@@ -61,10 +61,16 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install runtime dependencies (TTS: espeak-ng, opus-tools; transcoding: ffmpeg)
+# Install runtime dependencies. The custom VITS path uses a small isolated
+# Python environment with ONNX Runtime only; PyTorch/Coqui are intentionally
+# not installed in production.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata espeak-ng opus-tools ffmpeg wget \
+    ca-certificates tzdata espeak-ng opus-tools ffmpeg wget python3 python3-venv \
     && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/whatomate-vits \
+    && /opt/whatomate-vits/bin/pip install --no-cache-dir --disable-pip-version-check \
+       numpy==1.26.4 onnxruntime==1.20.1
 
 # Copy binary from builder
 COPY --from=builder /app/whatomate .
@@ -72,12 +78,16 @@ COPY --from=builder /app/whatomate .
 # Copy config example (will be overridden by env vars in production)
 COPY --from=builder /app/config.example.toml ./config.toml
 
-
-# Install Piper TTS binary + shared libraries
-COPY --from=piper-dl /tmp/piper/piper /usr/local/bin/piper
+# Install the real Piper binary under a private name. /usr/local/bin/piper is a
+# tiny router that sends converted Coqui VITS models to the lightweight ONNX
+# runner while preserving native Piper behaviour for every normal voice.
+COPY --from=piper-dl /tmp/piper/piper /usr/local/bin/piper-real
 COPY --from=piper-dl /tmp/piper/lib*.so* /usr/local/lib/
 COPY --from=piper-dl /tmp/piper/espeak-ng-data /usr/share/espeak-ng-data
-RUN ldconfig
+COPY --from=builder /app/docker/piper-router.sh /usr/local/bin/piper
+COPY --from=builder /app/internal/tts/vits_onnx.py /usr/local/lib/whatomate/vits_onnx.py
+RUN chmod 0755 /usr/local/bin/piper /usr/local/bin/piper-real /usr/local/lib/whatomate/vits_onnx.py \
+    && ldconfig
 
 # Install default voice model
 COPY --from=piper-dl /tmp/piper-models /opt/piper/models
