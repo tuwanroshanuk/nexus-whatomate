@@ -94,7 +94,7 @@ function applyFilter() {
 
 function actionVariant(action: string): string {
   switch (action) {
-    case 'created': return 'bg-green-500/10 text-green-500 border-green-500/20'
+    case 'created': return 'bg-pink-500/10 text-pink-500 border-pink-500/20'
     case 'updated': return 'bg-blue-500/10 text-blue-500 border-blue-500/20'
     case 'deleted': return 'bg-red-500/10 text-red-500 border-red-500/20'
     default: return ''

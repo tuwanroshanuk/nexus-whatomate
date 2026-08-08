@@ -289,7 +289,7 @@ onMounted(() => { loadResponse() })
     <DetailPageLayout
       :title="pageTitle"
       :icon="MessageSquareText"
-      icon-gradient="bg-gradient-to-br from-teal-500 to-emerald-600 shadow-teal-500/20"
+      icon-gradient="bg-gradient-to-br from-pink-500 to-pink-600 shadow-pink-500/20"
       back-link="/settings/canned-responses"
       :breadcrumbs="breadcrumbs"
       :is-loading="isLoading"

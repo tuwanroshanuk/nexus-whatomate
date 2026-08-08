@@ -307,7 +307,7 @@ function getStatusIcon(status: string) {
 function getStatusClass(status: string): string {
   switch (status) {
     case 'completed':
-      return 'border-green-600 text-green-600'
+      return 'border-pink-600 text-pink-600'
     case 'running':
     case 'processing':
     case 'queued':
@@ -324,7 +324,7 @@ function getRecipientStatusClass(status: string): string {
   switch (status) {
     case 'sent':
     case 'delivered':
-      return 'border-green-600 text-green-600'
+      return 'border-pink-600 text-pink-600'
     case 'failed':
       return 'border-destructive text-destructive'
     default:
@@ -1145,7 +1145,7 @@ onUnmounted(() => {
             <span class="text-[10px] text-muted-foreground uppercase tracking-wide">{{ $t('campaigns.sent', 'Sent') }}</span>
           </div>
           <div class="flex flex-col items-center gap-1 rounded-lg border p-3">
-            <CheckCircle class="h-4 w-4 text-green-500" />
+            <CheckCircle class="h-4 w-4 text-pink-500" />
             <span class="text-lg font-semibold">{{ campaign.delivered_count }}</span>
             <span class="text-[10px] text-muted-foreground uppercase tracking-wide">{{ $t('campaigns.delivered', 'Delivered') }}</span>
           </div>
@@ -1169,7 +1169,7 @@ onUnmounted(() => {
           </div>
           <div class="h-2.5 w-full bg-muted rounded-full overflow-hidden flex">
             <div
-              class="bg-green-500 h-full transition-all duration-500"
+              class="bg-pink-500 h-full transition-all duration-500"
               :style="{ width: `${(campaign.delivered_count / campaign.total_recipients) * 100}%` }"
             />
             <div
@@ -1182,7 +1182,7 @@ onUnmounted(() => {
             />
           </div>
           <div class="flex items-center gap-4 text-[10px] text-muted-foreground">
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500" /> {{ $t('campaigns.delivered', 'Delivered') }}</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-pink-500" /> {{ $t('campaigns.delivered', 'Delivered') }}</span>
             <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500" /> {{ $t('campaigns.sent', 'Sent') }}</span>
             <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-destructive" /> {{ $t('campaigns.failed', 'Failed') }}</span>
           </div>
@@ -1375,7 +1375,7 @@ onUnmounted(() => {
           </div>
           <!-- Validation Feedback -->
           <div v-if="recipientsInput.trim()">
-            <p v-if="manualInputValidation.isValid" class="text-xs text-green-600">
+            <p v-if="manualInputValidation.isValid" class="text-xs text-pink-600">
               {{ manualInputValidation.validLines }} valid recipient{{ manualInputValidation.validLines !== 1 ? 's' : '' }}
             </p>
             <div v-else-if="manualInputValidation.invalidLines.length > 0" class="text-xs space-y-1">

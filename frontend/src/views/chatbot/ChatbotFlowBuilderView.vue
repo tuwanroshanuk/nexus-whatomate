@@ -128,11 +128,11 @@ const palette: { type: ChatNodeType; label: string; icon: any; color: string }[]
   { type: 'message', label: 'Text', icon: MessageSquare, color: 'bg-blue-600' },
   { type: 'buttons', label: 'Buttons', icon: MousePointerClick, color: 'bg-purple-600' },
   { type: 'api_call', label: 'API', icon: Globe, color: 'bg-orange-600' },
-  { type: 'whatsapp_flow', label: 'WA Flow', icon: MessageCircle, color: 'bg-green-600' },
+  { type: 'whatsapp_flow', label: 'WA Flow', icon: MessageCircle, color: 'bg-pink-600' },
   { type: 'transfer', label: 'Transfer', icon: Users, color: 'bg-amber-600' },
   { type: 'condition', label: 'Condition', icon: GitBranch, color: 'bg-indigo-600' },
   { type: 'timing', label: 'Timing', icon: Clock, color: 'bg-cyan-600' },
-  { type: 'goto_flow', label: 'Go to Flow', icon: ExternalLink, color: 'bg-teal-600' },
+  { type: 'goto_flow', label: 'Go to Flow', icon: ExternalLink, color: 'bg-pink-600' },
   { type: 'end', label: 'End', icon: StopCircle, color: 'bg-slate-600' },
 ]
 

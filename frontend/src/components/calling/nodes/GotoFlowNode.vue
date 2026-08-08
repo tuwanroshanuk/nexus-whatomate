@@ -18,7 +18,7 @@ const summary = computed(() => {
 </script>
 
 <template>
-  <BaseNode :label="data?.label || 'Goto Flow'" header-class="bg-teal-600" :output-handles="[]" :has-input="!data?.isEntryNode">
+  <BaseNode :label="data?.label || 'Goto Flow'" header-class="bg-pink-700" :output-handles="[]" :has-input="!data?.isEntryNode">
     <template #icon><ExternalLink class="w-4 h-4" /></template>
     <p class="truncate">{{ summary }}</p>
   </BaseNode>

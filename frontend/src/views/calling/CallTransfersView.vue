@@ -135,7 +135,7 @@ onMounted(() => {
             >
               <template #cell-caller_phone="{ item: transfer }">
                 <div class="flex items-center gap-2">
-                  <Phone class="h-4 w-4 text-green-400" />
+                  <Phone class="h-4 w-4 text-pink-400" />
                   <span>{{ transfer.contact?.profile_name || transfer.caller_phone }}</span>
                 </div>
               </template>
@@ -150,7 +150,7 @@ onMounted(() => {
               <template #cell-actions="{ item: transfer }">
                 <Button
                   size="sm"
-                  class="bg-green-600 hover:bg-green-500 text-white"
+                  class="bg-pink-600 hover:bg-pink-500 text-white"
                   @click="handleAccept(transfer.id)"
                 >
                   <Phone class="h-3.5 w-3.5 mr-1" />
@@ -190,7 +190,7 @@ onMounted(() => {
                 <div class="flex items-center gap-2">
                   <component :is="transfer.status === 'completed' ? Phone : PhoneOff"
                     class="h-4 w-4"
-                    :class="transfer.status === 'completed' ? 'text-green-400' : 'text-red-400'"
+                    :class="transfer.status === 'completed' ? 'text-pink-400' : 'text-red-400'"
                   />
                   <span>{{ transfer.contact?.profile_name || transfer.caller_phone }}</span>
                 </div>

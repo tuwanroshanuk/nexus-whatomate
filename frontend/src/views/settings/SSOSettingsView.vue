@@ -236,7 +236,7 @@ onMounted(() => {
 
 <template>
   <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
-    <PageHeader :title="$t('sso.title')" :subtitle="$t('sso.subtitle')" :icon="ShieldCheck" icon-gradient="bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20" />
+    <PageHeader :title="$t('sso.title')" :subtitle="$t('sso.subtitle')" :icon="ShieldCheck" icon-gradient="bg-gradient-to-br from-pink-500 to-pink-600 shadow-pink-500/20" />
 
     <ErrorState
       v-if="fetchError && !isLoading"
@@ -367,7 +367,7 @@ onMounted(() => {
                 class="shrink-0"
                 @click="copyRedirectUrl"
               >
-                <Check v-if="copiedRedirectUrl" class="h-4 w-4 text-green-500" />
+                <Check v-if="copiedRedirectUrl" class="h-4 w-4 text-pink-500" />
                 <Copy v-else class="h-4 w-4" />
               </Button>
             </div>

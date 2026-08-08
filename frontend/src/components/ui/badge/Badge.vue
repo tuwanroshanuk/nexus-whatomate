@@ -9,15 +9,15 @@ const badgeVariants = cva(
     variants: {
       variant: {
         // Modern opacity-based badges like Linear/Vercel
-        default: 'border-transparent bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700',
+        default: 'border-transparent bg-pink-500/20 text-pink-400 light:bg-pink-100 light:text-pink-700',
         secondary: 'border-transparent bg-white/[0.08] text-white/70 light:bg-gray-100 light:text-gray-700',
         destructive: 'border-transparent bg-red-500/20 text-red-400 light:bg-red-100 light:text-red-700',
         outline: 'border-white/20 text-white/70 light:border-gray-200 light:text-gray-700',
         // Status badges with glow effect
-        success: 'border-transparent bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700',
+        success: 'border-transparent bg-pink-500/20 text-pink-400 light:bg-pink-100 light:text-pink-700',
         warning: 'border-transparent bg-amber-500/20 text-amber-400 light:bg-amber-100 light:text-amber-700',
         info: 'border-transparent bg-blue-500/20 text-blue-400 light:bg-blue-100 light:text-blue-700',
-        active: 'border-transparent bg-emerald-500/20 text-emerald-400 badge-pulse light:bg-emerald-100 light:text-emerald-700'
+        active: 'border-transparent bg-pink-500/20 text-pink-400 badge-pulse light:bg-pink-100 light:text-pink-700'
       }
     },
     defaultVariants: {

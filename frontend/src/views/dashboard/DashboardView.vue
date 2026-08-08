@@ -126,32 +126,32 @@ const selectedShortcuts = ref<string[]>([])
 
 // Shortcut registry
 const SHORTCUT_REGISTRY = computed(() => ({
-  chat: { label: t('dashboard.startChat'), to: '/chat', icon: MessageSquare, gradient: 'from-emerald-500 to-green-600' },
+  chat: { label: t('dashboard.startChat'), to: '/chat', icon: MessageSquare, gradient: 'from-pink-500 to-pink-600' },
   campaigns: { label: t('nav.campaigns'), to: '/campaigns', icon: Megaphone, gradient: 'from-orange-500 to-amber-600' },
   templates: { label: t('nav.templates'), to: '/templates', icon: FileText, gradient: 'from-blue-500 to-cyan-600' },
   chatbot: { label: t('nav.chatbot'), to: '/chatbot', icon: Bot, gradient: 'from-purple-500 to-pink-600' },
   contacts: { label: t('nav.contacts'), to: '/settings/contacts', icon: Contact, gradient: 'from-cyan-500 to-blue-600' },
   flows: { label: t('nav.flows'), to: '/flows', icon: Workflow, gradient: 'from-indigo-500 to-violet-600' },
   transfers: { label: t('nav.transfers'), to: '/chatbot/transfers', icon: UserX, gradient: 'from-rose-500 to-red-600' },
-  agentAnalytics: { label: t('nav.agentAnalytics'), to: '/analytics/agents', icon: BarChart3, gradient: 'from-teal-500 to-cyan-600' },
+  agentAnalytics: { label: t('nav.agentAnalytics'), to: '/analytics/agents', icon: BarChart3, gradient: 'from-pink-500 to-cyan-600' },
   metaInsights: { label: t('nav.metaInsights'), to: '/analytics/meta-insights', icon: LineChart, gradient: 'from-sky-500 to-blue-600' },
   settings: { label: t('nav.settings'), to: '/settings', icon: Settings, gradient: 'from-gray-500 to-zinc-600' },
   accounts: { label: t('nav.accounts'), to: '/settings/accounts', icon: Users, gradient: 'from-violet-500 to-purple-600' },
   cannedResponses: { label: t('nav.cannedResponses'), to: '/settings/canned-responses', icon: MessageSquareText, gradient: 'from-amber-500 to-yellow-600' },
   tags: { label: t('nav.tags'), to: '/settings/tags', icon: Tags, gradient: 'from-pink-500 to-rose-600' },
-  teams: { label: t('nav.teams'), to: '/settings/teams', icon: Users, gradient: 'from-lime-500 to-green-600' },
+  teams: { label: t('nav.teams'), to: '/settings/teams', icon: Users, gradient: 'from-lime-500 to-pink-600' },
   users: { label: t('nav.users'), to: '/settings/users', icon: Users, gradient: 'from-fuchsia-500 to-pink-600' },
   roles: { label: t('nav.roles'), to: '/settings/roles', icon: Shield, gradient: 'from-slate-500 to-gray-600' },
   apiKeys: { label: t('nav.apiKeys'), to: '/settings/api-keys', icon: Key, gradient: 'from-yellow-500 to-orange-600' },
   webhooks: { label: t('nav.webhooks'), to: '/settings/webhooks', icon: Webhook, gradient: 'from-red-500 to-rose-600' },
   customActions: { label: t('nav.customActions'), to: '/settings/custom-actions', icon: Zap, gradient: 'from-amber-500 to-orange-600' },
-  sso: { label: t('nav.sso'), to: '/settings/sso', icon: ShieldCheck, gradient: 'from-emerald-500 to-teal-600' },
+  sso: { label: t('nav.sso'), to: '/settings/sso', icon: ShieldCheck, gradient: 'from-pink-500 to-pink-600' },
 }))
 
 // Color options
 const colorOptions = computed(() => [
   { value: 'blue', label: t('dashboard.colorBlue'), bg: 'bg-blue-500/20', text: 'text-blue-400' },
-  { value: 'green', label: t('dashboard.colorGreen'), bg: 'bg-emerald-500/20', text: 'text-emerald-400' },
+  { value: 'green', label: t('dashboard.colorGreen'), bg: 'bg-pink-500/20', text: 'text-pink-400' },
   { value: 'purple', label: t('dashboard.colorPurple'), bg: 'bg-purple-500/20', text: 'text-purple-400' },
   { value: 'orange', label: t('dashboard.colorOrange'), bg: 'bg-orange-500/20', text: 'text-orange-400' },
   { value: 'red', label: t('dashboard.colorRed'), bg: 'bg-red-500/20', text: 'text-red-400' },
@@ -168,7 +168,7 @@ const chartTypeOptions = computed(() => [
 // Chart color palette for pie charts
 const chartColors = [
   'rgba(59, 130, 246, 0.8)',
-  'rgba(16, 185, 129, 0.8)',
+  'rgba(190, 24, 93, 0.8)',
   'rgba(245, 158, 11, 0.8)',
   'rgba(139, 92, 246, 0.8)',
   'rgba(239, 68, 68, 0.8)',
@@ -321,7 +321,7 @@ const formatTime = (dateStr: string): string => {
 const getWidgetColor = (color: string) => {
   const gradientMap: Record<string, string> = {
     blue: 'bg-gradient-to-r from-blue-500/60 to-blue-500/0',
-    green: 'bg-gradient-to-r from-emerald-500/60 to-emerald-500/0',
+    green: 'bg-gradient-to-r from-pink-500/60 to-pink-500/0',
     purple: 'bg-gradient-to-r from-violet-500/60 to-violet-500/0',
     orange: 'bg-gradient-to-r from-amber-500/60 to-amber-500/0',
     red: 'bg-gradient-to-r from-rose-500/60 to-rose-500/0',
@@ -706,7 +706,7 @@ onMounted(() => {
     <!-- Header -->
     <header class="border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b]/95 light:bg-white/95 backdrop-blur">
       <div class="flex h-16 items-center px-6">
-        <div class="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mr-3 shadow-lg shadow-emerald-500/20">
+        <div class="h-8 w-8 rounded-lg bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center mr-3 shadow-lg shadow-pink-500/20">
           <LayoutDashboard class="h-4 w-4 text-white" />
         </div>
         <div class="flex-1">
@@ -728,7 +728,7 @@ onMounted(() => {
             @click="isDragMode = !isDragMode"
             :class="[
               isDragMode
-                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30 hover:text-emerald-300'
+                ? 'bg-pink-500/20 border-pink-500/40 text-pink-400 hover:bg-pink-500/30 hover:text-pink-300'
                 : 'bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700'
             ]"
           >
@@ -855,10 +855,10 @@ onMounted(() => {
                     :is="widgetData[item.i]?.change > 0 ? TrendingUp : widgetData[item.i]?.change < 0 ? TrendingDown : Minus"
                     :class="[
                       'h-3 w-3 mr-1',
-                      widgetData[item.i]?.change > 0 ? 'text-emerald-400' : widgetData[item.i]?.change < 0 ? 'text-red-400' : 'text-white/30'
+                      widgetData[item.i]?.change > 0 ? 'text-pink-400' : widgetData[item.i]?.change < 0 ? 'text-red-400' : 'text-white/30'
                     ]"
                   />
-                  <span :class="widgetData[item.i]?.change > 0 ? 'text-emerald-400' : widgetData[item.i]?.change < 0 ? 'text-red-400' : 'text-white/30 light:text-gray-400'">
+                  <span :class="widgetData[item.i]?.change > 0 ? 'text-pink-400' : widgetData[item.i]?.change < 0 ? 'text-red-400' : 'text-white/30 light:text-gray-400'">
                     {{ Math.abs(widgetData[item.i]?.change || 0).toFixed(1) }}%
                   </span>
                   <span class="ml-1">{{ comparisonPeriodLabel }}</span>
@@ -985,7 +985,7 @@ onMounted(() => {
                       <div
                         :class="[
                           'h-10 w-10 rounded-lg flex items-center justify-center text-sm font-medium shrink-0',
-                          row.direction === 'incoming' ? 'bg-gradient-to-br from-emerald-500 to-green-600 text-white' : 'bg-gradient-to-br from-blue-500 to-cyan-600 text-white'
+                          row.direction === 'incoming' ? 'bg-gradient-to-br from-pink-500 to-pink-600 text-white' : 'bg-gradient-to-br from-blue-500 to-cyan-600 text-white'
                         ]"
                       >
                         {{ row.label.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() }}
@@ -1004,7 +1004,7 @@ onMounted(() => {
                             v-if="row.direction"
                             :class="[
                               'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
-                              row.direction === 'incoming' ? 'bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700' : 'bg-blue-500/20 text-blue-400 light:bg-blue-100 light:text-blue-700'
+                              row.direction === 'incoming' ? 'bg-pink-500/20 text-pink-400 light:bg-pink-100 light:text-pink-700' : 'bg-blue-500/20 text-blue-400 light:bg-blue-100 light:text-blue-700'
                             ]"
                           >
                             {{ row.direction }}
@@ -1014,7 +1014,7 @@ onMounted(() => {
                             :class="[
                               'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
                               row.status === 'delivered' ? 'bg-blue-500/20 text-blue-400 light:bg-blue-100 light:text-blue-700' :
-                              row.status === 'read' ? 'bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700' :
+                              row.status === 'read' ? 'bg-pink-500/20 text-pink-400 light:bg-pink-100 light:text-pink-700' :
                               row.status === 'failed' ? 'bg-red-500/20 text-red-400 light:bg-red-100 light:text-red-700' :
                               'bg-white/10 text-white/50 light:bg-gray-100 light:text-gray-600'
                             ]"
@@ -1226,7 +1226,7 @@ onMounted(() => {
                   type="checkbox"
                   :value="key"
                   v-model="selectedShortcuts"
-                  class="rounded border-white/20 bg-white/[0.04] text-emerald-500 focus:ring-emerald-500 light:border-gray-300 light:bg-white"
+                  class="rounded border-white/20 bg-white/[0.04] text-pink-500 focus:ring-pink-500 light:border-gray-300 light:bg-white"
                 />
                 <div class="flex items-center gap-2">
                   <div :class="['h-8 w-8 rounded-lg bg-gradient-to-br flex items-center justify-center', shortcut.gradient]">
@@ -1369,7 +1369,7 @@ onMounted(() => {
 /* Grid layout placeholder styling */
 .vue-grid-item.vue-grid-placeholder {
   background: transparent !important;
-  border: 2px dashed rgba(16, 185, 129, 0.4) !important;
+  border: 2px dashed rgba(190, 24, 93, 0.4) !important;
   border-radius: 0.75rem;
 }
 

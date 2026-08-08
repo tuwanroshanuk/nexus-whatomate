@@ -166,7 +166,7 @@ async function confirmDelete() {
                   <Badge variant="outline">{{ team.member_count || 0 }}</Badge>
                 </template>
                 <template #cell-status="{ item: team }">
-                  <Badge variant="outline" :class="team.is_active ? 'border-green-600 text-green-600' : ''">{{ team.is_active ? $t('common.active') : $t('common.inactive') }}</Badge>
+                  <Badge variant="outline" :class="team.is_active ? 'border-pink-600 text-pink-600' : ''">{{ team.is_active ? $t('common.active') : $t('common.inactive') }}</Badge>
                 </template>
                 <template #cell-created="{ item: team }">
                   <span class="text-muted-foreground">{{ formatDate(team.created_at) }}</span>

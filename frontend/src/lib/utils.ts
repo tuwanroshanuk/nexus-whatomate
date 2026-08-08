@@ -61,12 +61,12 @@ const avatarGradients = [
   'from-blue-500 to-cyan-600',
   'from-rose-500 to-pink-600',
   'from-amber-500 to-orange-600',
-  'from-emerald-500 to-teal-600',
+  'from-pink-500 to-pink-600',
   'from-indigo-500 to-blue-600',
   'from-fuchsia-500 to-purple-600',
   'from-cyan-500 to-blue-600',
   'from-orange-500 to-red-600',
-  'from-teal-500 to-emerald-600',
+  'from-pink-500 to-pink-600',
 ]
 
 export function getAvatarGradient(name: string): string {
@@ -90,7 +90,7 @@ export function getQualityBadgeClass(rating: string): string {
   switch (rating.toUpperCase()) {
     case 'GREEN':
     case 'HIGH':
-      return 'bg-green-950 text-green-400 border border-green-800/40 light:bg-green-100 light:text-green-800'
+      return 'bg-pink-950 text-pink-400 border border-pink-800/40 light:bg-pink-100 light:text-pink-800'
     case 'YELLOW':
     case 'MEDIUM':
       return 'bg-yellow-950 text-yellow-400 border border-yellow-800/40 light:bg-yellow-100 light:text-yellow-800'
@@ -126,7 +126,7 @@ export function getVerificationBadgeClass(status: string): string {
   switch (status.toUpperCase()) {
     case 'VERIFIED':
     case 'VERIFIED_CODE':
-      return 'bg-green-950 text-green-400 border border-green-800/40 light:bg-green-100 light:text-green-800'
+      return 'bg-pink-950 text-pink-400 border border-pink-800/40 light:bg-pink-100 light:text-pink-800'
     case 'NOT_VERIFIED':
       return 'bg-red-950 text-red-400 border border-red-800/40 light:bg-red-100 light:text-red-800'
     case 'EXPIRED':

@@ -36,7 +36,7 @@ const formattedEntries = computed(() => {
     switch (entry.type) {
       case 'flow_start':
         icon = Play
-        color = 'text-green-500'
+        color = 'text-pink-500'
         label = 'Flow started'
         details = `${entry.details.stepsCount} steps`
         break
@@ -61,7 +61,7 @@ const formattedEntries = computed(() => {
         break
       case 'condition_eval':
         icon = GitBranch
-        color = entry.details.result ? 'text-green-500' : 'text-orange-500'
+        color = entry.details.result ? 'text-pink-500' : 'text-orange-500'
         label = `Condition: ${entry.details.type}`
         details = entry.details.result ? 'true' : 'false'
         break
@@ -73,7 +73,7 @@ const formattedEntries = computed(() => {
         break
       case 'validation_pass':
         icon = CheckCircle
-        color = 'text-green-500'
+        color = 'text-pink-500'
         label = 'Validation passed'
         break
       case 'validation_fail':
@@ -90,7 +90,7 @@ const formattedEntries = computed(() => {
         break
       case 'flow_complete':
         icon = Flag
-        color = 'text-green-600'
+        color = 'text-pink-600'
         label = 'Flow completed'
         details = entry.details.reason
         break

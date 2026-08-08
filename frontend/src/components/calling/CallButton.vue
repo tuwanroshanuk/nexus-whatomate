@@ -132,12 +132,12 @@ function handleError(err: any, title: string) {
           variant="ghost"
           size="sm"
           class="h-8 px-2 rounded-r-none relative text-white/70 hover:text-white hover:bg-white/[0.08] light:text-gray-600 light:hover:text-gray-900 light:hover:bg-gray-100"
-          :class="hasPermission ? 'text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20' : ''"
+          :class="hasPermission ? 'text-pink-400 hover:text-pink-300 bg-pink-500/10 border border-pink-500/20' : ''"
           :disabled="store.isOnCall || isInitiating || !hasPermission"
           @click="startDirectCall"
         >
-          <Loader2 v-if="isInitiating" class="h-4 w-4 animate-spin text-emerald-400" />
-          <Phone v-else class="h-4 w-4" :class="hasPermission ? 'text-emerald-400' : ''" />
+          <Loader2 v-if="isInitiating" class="h-4 w-4 animate-spin text-pink-400" />
+          <Phone v-else class="h-4 w-4" :class="hasPermission ? 'text-pink-400' : ''" />
 
           <span
             v-if="permission?.status === 'pending'"
@@ -178,11 +178,11 @@ function handleError(err: any, title: string) {
         <DropdownMenuSeparator class="bg-white/[0.08] light:bg-gray-200" />
 
         <DropdownMenuItem
-          class="gap-2.5 py-2.5 cursor-pointer focus:bg-emerald-500/10 focus:text-emerald-300 light:focus:bg-emerald-50 light:focus:text-emerald-700"
+          class="gap-2.5 py-2.5 cursor-pointer focus:bg-pink-500/10 focus:text-pink-300 light:focus:bg-pink-50 light:focus:text-pink-700"
           :disabled="!hasPermission"
           @click="startDirectCall"
         >
-          <div class="w-7 h-7 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+          <div class="w-7 h-7 rounded-md bg-pink-500/20 text-pink-400 flex items-center justify-center">
             <PhoneCall class="h-3.5 w-3.5" />
           </div>
           <div>
@@ -229,8 +229,8 @@ function handleError(err: any, title: string) {
         class="fixed bottom-6 right-6 z-[60] min-w-[260px] rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl"
       >
         <div class="flex items-center gap-3">
-          <div class="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600/20">
-            <Loader2 class="h-4 w-4 animate-spin text-emerald-400" />
+          <div class="flex h-9 w-9 items-center justify-center rounded-full bg-pink-600/20">
+            <Loader2 class="h-4 w-4 animate-spin text-pink-400" />
           </div>
           <div>
             <p class="text-sm font-medium text-zinc-100">{{ contactName }}</p>

@@ -19,7 +19,7 @@ const summary = computed(() => {
 <template>
   <BaseNode
     :label="data?.label || 'Go to Flow'"
-    header-class="bg-teal-600"
+    header-class="bg-pink-600"
     :output-handles="[]"
     :has-input="!data?.isEntryNode"
   >

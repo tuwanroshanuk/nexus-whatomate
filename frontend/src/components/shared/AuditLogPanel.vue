@@ -19,7 +19,7 @@ const page = ref(1)
 const limit = 10
 
 const actionConfig: Record<string, { icon: any; color: string; label: string }> = {
-  created: { icon: Plus, color: 'bg-green-500', label: 'Created' },
+  created: { icon: Plus, color: 'bg-pink-500', label: 'Created' },
   updated: { icon: Pencil, color: 'bg-blue-500', label: 'Updated' },
   deleted: { icon: Trash2, color: 'bg-red-500', label: 'Deleted' },
 }

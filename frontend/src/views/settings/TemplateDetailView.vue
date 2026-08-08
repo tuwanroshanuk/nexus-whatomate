@@ -807,10 +807,10 @@ onMounted(async () => {
           <div v-if="headerMediaFilename && !headerMediaHandle" class="text-xs text-muted-foreground">
             {{ headerMediaFilename }}
           </div>
-          <div v-if="headerMediaHandle" class="bg-green-950 light:bg-green-50 border border-green-800 light:border-green-200 rounded-lg p-2.5">
+          <div v-if="headerMediaHandle" class="bg-pink-950 light:bg-pink-50 border border-pink-800 light:border-pink-200 rounded-lg p-2.5">
             <div class="flex items-center gap-2">
-              <Check class="h-3.5 w-3.5 text-green-600" />
-              <span class="text-xs text-green-200 light:text-green-800">{{ $t('templates.mediaUploadedSuccess', 'Media uploaded') }}</span>
+              <Check class="h-3.5 w-3.5 text-pink-600" />
+              <span class="text-xs text-pink-200 light:text-pink-800">{{ $t('templates.mediaUploadedSuccess', 'Media uploaded') }}</span>
             </div>
             <p class="text-xs text-muted-foreground mt-1 font-mono truncate">
               Handle: {{ headerMediaHandle.substring(0, 40) }}...

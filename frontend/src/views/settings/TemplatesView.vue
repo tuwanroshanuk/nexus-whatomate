@@ -255,7 +255,7 @@ async function confirmDeleteTemplate() {
 function getStatusBadgeClass(status: string) {
   switch (status) {
     case 'APPROVED':
-      return 'bg-green-900 text-green-300 light:bg-green-100 light:text-green-800'
+      return 'bg-pink-900 text-pink-300 light:bg-pink-100 light:text-pink-800'
     case 'PENDING':
       return 'bg-yellow-900 text-yellow-300 light:bg-yellow-100 light:text-yellow-800'
     case 'REJECTED':

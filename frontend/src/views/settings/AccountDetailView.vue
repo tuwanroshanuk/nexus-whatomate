@@ -275,7 +275,7 @@ onMounted(async () => {
   <DetailPageLayout
     :title="isNew ? $t('accounts.newAccount', 'New Account') : (account?.name || '')"
     :icon="Phone"
-    icon-gradient="bg-gradient-to-br from-emerald-500 to-green-600 shadow-emerald-500/20"
+    icon-gradient="bg-gradient-to-br from-pink-500 to-pink-600 shadow-pink-500/20"
     back-link="/settings/accounts"
     :breadcrumbs="breadcrumbs"
     :is-loading="isLoading"
@@ -310,7 +310,7 @@ onMounted(async () => {
     <Card v-if="testResult">
       <CardContent class="p-4">
         <div v-if="testResult.success" class="space-y-2">
-          <div class="flex items-center gap-2 text-green-400 light:text-green-600">
+          <div class="flex items-center gap-2 text-pink-400 light:text-pink-600">
             <CheckCircle2 class="h-4 w-4" />
             <span class="text-sm font-medium">{{ $t('accounts.connected', 'Connected') }}</span>
             <span v-if="testResult.display_phone_number" class="text-sm text-muted-foreground">— {{ testResult.display_phone_number }}</span>
@@ -411,7 +411,7 @@ onMounted(async () => {
               <span v-else class="text-muted-foreground text-[10px]">{{ $t('accounts.accessTokenKeepExisting', '(leave empty to keep existing)') }}</span>
             </Label>
             <Input v-model="form.access_token" type="password" :disabled="!canWrite" />
-            <Badge v-if="account?.has_access_token" variant="outline" class="border-green-600 text-green-600">
+            <Badge v-if="account?.has_access_token" variant="outline" class="border-pink-600 text-pink-600">
               <Check class="h-3 w-3 mr-1" /> {{ $t('accounts.configured', 'Configured') }}
             </Badge>
           </div>
@@ -421,7 +421,7 @@ onMounted(async () => {
               <span v-if="!isNew" class="text-muted-foreground text-[10px]">{{ $t('accounts.accessTokenKeepExisting', '(leave empty to keep existing)') }}</span>
             </Label>
             <Input v-model="form.app_secret" type="password" :disabled="!canWrite" />
-            <Badge v-if="account?.has_app_secret" variant="outline" class="border-green-600 text-green-600">
+            <Badge v-if="account?.has_app_secret" variant="outline" class="border-pink-600 text-pink-600">
               <Check class="h-3 w-3 mr-1" /> {{ $t('accounts.configured', 'Configured') }}
             </Badge>
           </div>

@@ -1729,10 +1729,10 @@ async function sendMediaMessage() {
                 variant="ghost"
                 size="icon"
                 class="h-8 w-8 shrink-0 relative"
-                :class="contactsStore.selectedTags.length > 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100'"
+                :class="contactsStore.selectedTags.length > 0 ? 'text-pink-400 bg-pink-500/10' : 'text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100'"
               >
                 <Filter class="h-4 w-4" />
-                <span v-if="contactsStore.selectedTags.length > 0" class="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 text-[10px] text-white flex items-center justify-center">
+                <span v-if="contactsStore.selectedTags.length > 0" class="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-pink-500 text-[10px] text-white flex items-center justify-center">
                   {{ contactsStore.selectedTags.length }}
                 </span>
               </Button>
@@ -1767,7 +1767,7 @@ async function sendMediaMessage() {
                     <span class="flex-1 text-left truncate">{{ tag.name }}</span>
                     <Check
                       v-if="contactsStore.selectedTags.includes(tag.name)"
-                      class="h-4 w-4 text-emerald-400 shrink-0"
+                      class="h-4 w-4 text-pink-400 shrink-0"
                     />
                   </button>
                 </div>
@@ -1824,7 +1824,7 @@ async function sendMediaMessage() {
                 <p class="flex-1 min-w-0 text-xs text-white/50 light:text-gray-500 truncate">
                   {{ contact.phone_number }}
                 </p>
-                <Badge v-if="contact.unread_count > 0" class="flex-shrink-0 h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700">
+                <Badge v-if="contact.unread_count > 0" class="flex-shrink-0 h-5 text-[10px] bg-pink-500/20 text-pink-400 light:bg-pink-100 light:text-pink-700">
                   {{ contact.unread_count }}
                 </Badge>
               </div>
@@ -1852,7 +1852,7 @@ async function sendMediaMessage() {
         class="flex-1 flex items-center justify-center text-white/40 light:text-gray-500"
       >
         <div class="text-center">
-          <div class="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20">
+          <div class="h-16 w-16 rounded-2xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-pink-500/20">
             <Send class="h-8 w-8 text-white" />
           </div>
           <h3 class="font-medium text-lg mb-1 text-white light:text-gray-900">{{ $t('chat.selectConversation') }}</h3>
@@ -2007,7 +2007,7 @@ async function sendMediaMessage() {
               :class="[
                 'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all',
                 acct.name === selectedAccount
-                  ? 'bg-emerald-600 text-white shadow-sm'
+                  ? 'bg-pink-600 text-white shadow-sm'
                   : 'bg-white/[0.08] text-white/70 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
               ]"
               @click="switchAccount(acct.name)"
@@ -2531,7 +2531,7 @@ async function sendMediaMessage() {
               @keydown.enter.exact.prevent="sendMessage"
               @input="autoResizeTextarea"
             />
-            <button type="submit" class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="!messageInput.trim() || isSending">
+            <button type="submit" class="w-9 h-9 rounded-lg bg-pink-600 hover:bg-pink-500 light:bg-pink-500 light:hover:bg-pink-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="!messageInput.trim() || isSending">
               <Send class="w-4 h-4 text-white" />
             </button>
           </form>

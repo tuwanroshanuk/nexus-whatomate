@@ -200,7 +200,7 @@ async function syncFlows() {
 }
 
 function openPreviewUrl(url: string) { window.open(url, '_blank') }
-function getStatusClass(status: string): string { return { PUBLISHED: 'border-green-600 text-green-600', DEPRECATED: 'border-destructive text-destructive' }[status] || '' }
+function getStatusClass(status: string): string { return { PUBLISHED: 'border-pink-600 text-pink-600', DEPRECATED: 'border-destructive text-destructive' }[status] || '' }
 function isFlowDraft(flow: WhatsAppFlow): boolean { return flow.status?.toUpperCase() === 'DRAFT' }
 
 const componentsWithoutId = ['TextHeading', 'TextSubheading', 'TextBody', 'TextInput', 'TextArea', 'Dropdown', 'RadioButtonsGroup', 'CheckboxGroup', 'DatePicker', 'Image', 'Footer']
@@ -303,7 +303,7 @@ function sanitizeScreensForMeta(screens: any[]): any[] {
                       v-if="isFlowDraft(flow) && flow.meta_flow_id"
                       :icon="publishingFlowId === flow.id ? Loader2 : Play"
                       :label="$t('flows.publishTooltip')"
-                      class="h-8 w-8 text-green-600"
+                      class="h-8 w-8 text-pink-600"
                       :disabled="savingToMetaFlowId === flow.id || publishingFlowId === flow.id"
                       @click="openPublishDialog(flow)"
                     />

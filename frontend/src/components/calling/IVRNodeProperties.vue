@@ -755,7 +755,7 @@ const greetingTab = computed(() =>
         <div v-for="event in callbackEvents" :key="event" class="border rounded-md">
           <button class="w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium hover:bg-muted/50" @click="updateCallbackField(event, '_expanded', !getCallbackConfig(event)._expanded)">
             <span>{{ callbackLabels[event] }}</span>
-            <span v-if="getCallbackConfig(event).url" class="text-[10px] text-emerald-500">Configured</span>
+            <span v-if="getCallbackConfig(event).url" class="text-[10px] text-pink-500">Configured</span>
           </button>
 
           <div v-if="getCallbackConfig(event)._expanded" class="px-3 pb-3 space-y-1.5 border-t">

@@ -135,7 +135,7 @@ async function doTransfer(agentId?: string) {
           >
             <span
               class="w-2 h-2 rounded-full shrink-0"
-              :class="member.is_available ? 'bg-green-500' : 'bg-zinc-400'"
+              :class="member.is_available ? 'bg-pink-500' : 'bg-zinc-400'"
             />
             <div class="min-w-0">
               <p class="text-sm font-medium truncate">{{ member.full_name }}</p>

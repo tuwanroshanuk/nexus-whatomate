@@ -84,10 +84,10 @@ async function handleAccept(id: string) {
       <!-- Caller info -->
       <div class="flex items-center gap-3 mb-3">
         <div class="w-8 h-8 rounded-full flex items-center justify-center"
-          :class="store.isOnCall ? 'bg-green-600/20' : 'bg-green-600/20'"
+          :class="store.isOnCall ? 'bg-pink-600/20' : 'bg-pink-600/20'"
         >
-          <PhoneIncoming v-if="!store.isOnCall && firstWaiting" class="h-4 w-4 text-green-400 animate-pulse" />
-          <Phone v-else class="h-4 w-4 text-green-400" />
+          <PhoneIncoming v-if="!store.isOnCall && firstWaiting" class="h-4 w-4 text-pink-400 animate-pulse" />
+          <Phone v-else class="h-4 w-4 text-pink-400" />
         </div>
         <div>
           <p class="text-sm font-medium text-zinc-100">
@@ -148,7 +148,7 @@ async function handleAccept(id: string) {
           v-if="firstWaiting"
           variant="ghost"
           size="sm"
-          class="h-10 w-10 rounded-full p-0 !bg-green-600 !text-white hover:!bg-green-500"
+          class="h-10 w-10 rounded-full p-0 !bg-pink-600 !text-white hover:!bg-pink-500"
           :disabled="acceptingId === firstWaiting.id"
           @click="handleAccept(firstWaiting.id)"
         >

@@ -65,12 +65,12 @@ const nodeTypes: any = {
 
 // Node palette
 const palette: { type: IVRNodeType; label: string; icon: any; color: string }[] = [
-  { type: 'greeting', label: 'Greeting', icon: Volume2, color: 'bg-green-600' },
+  { type: 'greeting', label: 'Greeting', icon: Volume2, color: 'bg-pink-600' },
   { type: 'menu', label: 'Menu', icon: Grid3X3, color: 'bg-purple-600' },
   { type: 'gather', label: 'Gather', icon: Hash, color: 'bg-blue-600' },
   { type: 'http_callback', label: 'HTTP', icon: Globe, color: 'bg-orange-600' },
   { type: 'transfer', label: 'Transfer', icon: Users, color: 'bg-amber-600' },
-  { type: 'goto_flow', label: 'Goto Flow', icon: ExternalLink, color: 'bg-teal-600' },
+  { type: 'goto_flow', label: 'Goto Flow', icon: ExternalLink, color: 'bg-pink-600' },
   { type: 'timing', label: 'Timing', icon: Clock, color: 'bg-cyan-600' },
   { type: 'hangup', label: 'Hangup', icon: PhoneOff, color: 'bg-red-600' },
 ]

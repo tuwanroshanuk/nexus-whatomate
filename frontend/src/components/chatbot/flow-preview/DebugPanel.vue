@@ -67,13 +67,13 @@ const statusColor = computed(() => {
     case 'idle':
       return 'bg-gray-500'
     case 'running':
-      return 'bg-green-500'
+      return 'bg-pink-500'
     case 'paused':
       return 'bg-yellow-500'
     case 'waiting_input':
       return 'bg-blue-500'
     case 'completed':
-      return 'bg-green-600'
+      return 'bg-pink-600'
     case 'error':
       return 'bg-red-500'
     default:
@@ -221,7 +221,7 @@ function handlePlayPause() {
                 <CircleDot
                   class="h-3 w-3"
                   :class="{
-                    'text-green-500': state.currentStepName === step.step_name,
+                    'text-pink-500': state.currentStepName === step.step_name,
                     'text-gray-300 dark:text-gray-600': state.currentStepName !== step.step_name
                   }"
                 />

@@ -256,7 +256,7 @@ async function confirmDelete() {
     <PageHeader
       :title="$t('accounts.title')"
       :icon="Phone"
-      icon-gradient="bg-gradient-to-br from-emerald-500 to-green-600 shadow-emerald-500/20"
+      icon-gradient="bg-gradient-to-br from-pink-500 to-pink-600 shadow-pink-500/20"
       back-link="/settings"
       :breadcrumbs="breadcrumbs"
     >
@@ -337,8 +337,8 @@ async function confirmDelete() {
                 </template>
                 <template #cell-account="{ item: account }">
                   <RouterLink :to="`/settings/accounts/${account.id}`" class="flex items-center gap-3 text-inherit no-underline hover:opacity-80">
-                    <div class="h-9 w-9 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
-                      <Phone class="h-4 w-4 text-emerald-500" />
+                    <div class="h-9 w-9 rounded-full bg-pink-500/10 flex items-center justify-center flex-shrink-0">
+                      <Phone class="h-4 w-4 text-pink-500" />
                     </div>
                     <p class="font-medium truncate">{{ account.name }}</p>
                   </RouterLink>
@@ -364,7 +364,7 @@ async function confirmDelete() {
                   </div>
                 </template>
                 <template #cell-status="{ item: account }">
-                  <Badge variant="outline" :class="account.status === 'active' ? 'border-green-600 text-green-600' : ''">
+                  <Badge variant="outline" :class="account.status === 'active' ? 'border-pink-600 text-pink-600' : ''">
                     {{ account.status }}
                   </Badge>
                 </template>
@@ -410,7 +410,7 @@ async function confirmDelete() {
     <Dialog v-model:open="showOnboardingDialog">
       <DialogContent class="sm:max-w-2xl bg-[#0e0e11] border-[#222227] text-white light:bg-white light:border-gray-200 light:text-gray-900 p-6 shadow-2xl rounded-xl">
         <DialogHeader class="mb-4">
-          <DialogTitle class="text-xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 light:from-emerald-600 light:to-green-600 bg-clip-text text-transparent flex items-center gap-2">
+          <DialogTitle class="text-xl font-bold bg-gradient-to-r from-pink-400 to-pink-400 light:from-pink-600 light:to-pink-600 bg-clip-text text-transparent flex items-center gap-2">
             {{ $t('accounts.connectTitle') }}
           </DialogTitle>
           <DialogDescription class="text-gray-400 light:text-gray-500 mt-1">
@@ -422,27 +422,27 @@ async function confirmDelete() {
           <!-- Coexistence Option Card -->
           <div
             @click="launchWhatsAppSignup(true)"
-            class="relative group cursor-pointer flex flex-col p-5 rounded-xl border border-emerald-500/20 bg-[#141419] hover:bg-[#181822] hover:border-emerald-500/50 hover:shadow-[0_0_20px_rgba(16,185,129,0.1)] light:bg-gray-50/50 light:border-emerald-200 light:hover:bg-gray-100/70 light:hover:border-emerald-400 light:hover:shadow-[0_0_20px_rgba(16,185,129,0.05)] transition-all duration-300 overflow-hidden"
+            class="relative group cursor-pointer flex flex-col p-5 rounded-xl border border-pink-500/20 bg-[#141419] hover:bg-[#181822] hover:border-pink-500/50 hover:shadow-[0_0_20px_rgba(16,185,129,0.1)] light:bg-gray-50/50 light:border-pink-200 light:hover:bg-gray-100/70 light:hover:border-pink-400 light:hover:shadow-[0_0_20px_rgba(16,185,129,0.05)] transition-all duration-300 overflow-hidden"
           >
             <!-- Badge -->
             <div class="absolute top-3 right-3">
-              <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-medium light:bg-emerald-50 light:text-emerald-600 light:border-emerald-200">
+              <span class="text-[10px] bg-pink-500/10 text-pink-400 border border-pink-500/20 px-2 py-0.5 rounded-full font-medium light:bg-pink-50 light:text-pink-600 light:border-pink-200">
                 {{ $t('accounts.coexistenceRecommend') }}
               </span>
             </div>
 
-            <div class="h-10 w-10 rounded-lg bg-emerald-500/10 light:bg-emerald-100/60 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-              <Smartphone class="h-5 w-5 text-emerald-400 light:text-emerald-600" />
+            <div class="h-10 w-10 rounded-lg bg-pink-500/10 light:bg-pink-100/60 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+              <Smartphone class="h-5 w-5 text-pink-400 light:text-pink-600" />
             </div>
 
-            <h3 class="text-base font-semibold text-white light:text-gray-900 group-hover:text-emerald-400 light:group-hover:text-emerald-600 transition-colors duration-200">
+            <h3 class="text-base font-semibold text-white light:text-gray-900 group-hover:text-pink-400 light:group-hover:text-pink-600 transition-colors duration-200">
               {{ $t('accounts.coexistenceTitle') }}
             </h3>
             <p class="text-xs text-gray-400 light:text-gray-600 mt-2 flex-grow leading-relaxed">
               {{ $t('accounts.coexistenceDesc') }}
             </p>
 
-            <div class="mt-5 flex items-center justify-between text-xs font-medium text-emerald-400 light:text-emerald-600">
+            <div class="mt-5 flex items-center justify-between text-xs font-medium text-pink-400 light:text-pink-600">
               <span>{{ $t('accounts.selectMode') }}</span>
               <span class="group-hover:translate-x-1 transition-transform duration-200">→</span>
             </div>

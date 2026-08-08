@@ -74,7 +74,7 @@ function formatValue(val: any): string {
 
 function actionVariant(action: string): string {
   switch (action) {
-    case 'created': return 'bg-green-500/10 text-green-500 border-green-500/20'
+    case 'created': return 'bg-pink-500/10 text-pink-500 border-pink-500/20'
     case 'updated': return 'bg-blue-500/10 text-blue-500 border-blue-500/20'
     case 'deleted': return 'bg-red-500/10 text-red-500 border-red-500/20'
     default: return ''
@@ -120,7 +120,7 @@ onMounted(async () => {
                 <div class="flex items-start gap-2 text-muted-foreground">
                   <span class="text-red-400 line-through break-words">{{ formatValue(change.old_value) }}</span>
                   <ArrowRight class="h-4 w-4 shrink-0 mt-0.5" />
-                  <span class="text-green-400 break-words">{{ formatValue(change.new_value) }}</span>
+                  <span class="text-pink-400 break-words">{{ formatValue(change.new_value) }}</span>
                 </div>
               </template>
               <template v-else-if="log.action === 'created'">

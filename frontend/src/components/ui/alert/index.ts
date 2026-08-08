@@ -15,7 +15,7 @@ export const alertVariants = cva(
           "border-destructive/50 text-destructive light:border-destructive [&>svg]:text-destructive",
         // Dark-first: dark mode is default, light mode uses light: prefix
         success:
-          "border-green-500/30 bg-green-950 text-green-200 [&>svg]:text-green-400 light:border-green-500/50 light:bg-green-50 light:text-green-800 light:[&>svg]:text-green-600",
+          "border-pink-500/30 bg-pink-950 text-pink-200 [&>svg]:text-pink-400 light:border-pink-500/50 light:bg-pink-50 light:text-pink-800 light:[&>svg]:text-pink-600",
         warning:
           "border-yellow-500/30 bg-yellow-950 text-yellow-200 [&>svg]:text-yellow-400 light:border-yellow-500/50 light:bg-yellow-50 light:text-yellow-800 light:[&>svg]:text-yellow-600",
         info:

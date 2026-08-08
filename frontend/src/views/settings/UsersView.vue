@@ -227,8 +227,8 @@ async function copyInviteLink() {
                 <div>
                   <div class="flex items-center gap-2">
                     <CardTitle>{{ $t('users.yourUsers') }}</CardTitle>
-                    <Badge variant="outline" class="border-green-600 text-green-600 gap-1.5">
-                      <span class="inline-block h-2 w-2 rounded-full bg-green-600" />
+                    <Badge variant="outline" class="border-pink-600 text-pink-600 gap-1.5">
+                      <span class="inline-block h-2 w-2 rounded-full bg-pink-600" />
                       {{ onlineCount }} {{ $t('users.online', 'online') }}
                     </Badge>
                   </div>
@@ -278,7 +278,7 @@ async function copyInviteLink() {
                   <Badge :variant="getRoleBadgeVariant(getRoleName(user))" class="capitalize">{{ getRoleName(user) }}</Badge>
                 </template>
                 <template #cell-status="{ item: user }">
-                  <Badge variant="outline" :class="user.is_active ? 'border-green-600 text-green-600' : ''">{{ user.is_active ? $t('common.active') : $t('common.inactive') }}</Badge>
+                  <Badge variant="outline" :class="user.is_active ? 'border-pink-600 text-pink-600' : ''">{{ user.is_active ? $t('common.active') : $t('common.inactive') }}</Badge>
                 </template>
                 <template #cell-created="{ item: user }">
                   <span class="text-muted-foreground">{{ formatDate(user.created_at) }}</span>

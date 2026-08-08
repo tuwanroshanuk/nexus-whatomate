@@ -221,7 +221,7 @@ function getStatusIcon(status: string) {
 function getStatusClass(status: string): string {
   switch (status) {
     case 'completed':
-      return 'border-green-600 text-green-600'
+      return 'border-pink-600 text-pink-600'
     case 'running':
     case 'processing':
     case 'queued':
@@ -337,7 +337,7 @@ function getProgressPercentage(campaign: Campaign): number {
                     </div>
                     <div class="flex items-center gap-3 text-xs">
                       <span title="Recipients"><Users class="h-3 w-3 inline mr-0.5" />{{ campaign.total_recipients }}</span>
-                      <span class="text-green-600" title="Delivered">{{ campaign.delivered_count }}</span>
+                      <span class="text-pink-600" title="Delivered">{{ campaign.delivered_count }}</span>
                       <span class="text-blue-600" title="Read">{{ campaign.read_count }}</span>
                       <span v-if="campaign.failed_count > 0" class="text-destructive" title="Failed">{{ campaign.failed_count }}</span>
                     </div>

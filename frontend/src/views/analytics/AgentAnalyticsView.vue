@@ -231,7 +231,7 @@ const sourceChartData = computed(() => {
         data,
         backgroundColor: [
           'rgba(59, 130, 246, 0.8)',
-          'rgba(16, 185, 129, 0.8)',
+          'rgba(190, 24, 93, 0.8)',
           'rgba(245, 158, 11, 0.8)',
           'rgba(139, 92, 246, 0.8)'
         ],
@@ -270,7 +270,7 @@ const comparisonChartData = computed(() => {
       {
         label: t('agentAnalytics.messagesSent'),
         data: analytics.value.agent_stats.map(a => a.messages_sent),
-        backgroundColor: 'rgba(16, 185, 129, 0.8)'
+        backgroundColor: 'rgba(190, 24, 93, 0.8)'
       }
     ]
   }
@@ -392,8 +392,8 @@ void _displayStats.value // Suppress unused warning
             <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
               <div class="flex flex-row items-center justify-between space-y-0 pb-2">
                 <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('agentAnalytics.transfersHandled') }}</span>
-                <div class="h-10 w-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                  <CheckCircle class="h-5 w-5 text-emerald-400" />
+                <div class="h-10 w-10 rounded-lg bg-pink-500/20 flex items-center justify-center">
+                  <CheckCircle class="h-5 w-5 text-pink-400" />
                 </div>
               </div>
               <div class="pt-2">

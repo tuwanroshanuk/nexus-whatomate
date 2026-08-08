@@ -303,9 +303,9 @@ function downloadSampleCsv() {
             </div>
 
             <!-- Import Result -->
-            <div v-if="importResult" class="rounded-md p-3 space-y-2" :class="importResult.errors > 0 ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-green-500/10 border border-green-500/20'">
+            <div v-if="importResult" class="rounded-md p-3 space-y-2" :class="importResult.errors > 0 ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-pink-500/10 border border-pink-500/20'">
               <div class="flex items-center gap-2">
-                <Check v-if="importResult.errors === 0" class="h-4 w-4 text-green-500" />
+                <Check v-if="importResult.errors === 0" class="h-4 w-4 text-pink-500" />
                 <AlertCircle v-else class="h-4 w-4 text-amber-500" />
                 <span class="font-medium">{{ $t('importExport.importComplete') }}</span>
               </div>
