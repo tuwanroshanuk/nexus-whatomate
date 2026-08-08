@@ -148,3 +148,5 @@ func (m *Manager) resolveNodeAudioFile(node *IVRNode, ctx *IVRContext) string {
           git add -A
           git commit -m "Fix runtime IVR TTS variable interpolation"
           git push origin HEAD:main
+
+# Trigger existing workflow after creation.
