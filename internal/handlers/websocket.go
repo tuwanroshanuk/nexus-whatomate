@@ -10,8 +10,6 @@ import (
 	"github.com/zerodha/fastglue"
 )
 
-// newUpgrader creates a WebSocket upgrader that validates origins against the
-// configured allowed origins. If no origins are configured, all are allowed.
 func newUpgrader(allowedOrigins map[string]bool) websocket.FastHTTPUpgrader {
 	return websocket.FastHTTPUpgrader{
 		ReadBufferSize:  1024,
@@ -23,53 +21,54 @@ func newUpgrader(allowedOrigins map[string]bool) websocket.FastHTTPUpgrader {
 	}
 }
 
-// wsUpgrader returns a WebSocket upgrader configured with the app's allowed origins.
 func (a *App) wsUpgrader() websocket.FastHTTPUpgrader {
 	allowedOrigins := middleware.ParseAllowedOrigins(a.Config.Server.AllowedOrigins)
 	return newUpgrader(allowedOrigins)
 }
 
-// WebSocketHandler handles WebSocket connections.
-// Authentication is performed via message-based auth after the upgrade:
-// the client must send {"type":"auth","payload":{"token":"<jwt>"}} within 5 seconds.
+// WebSocketHandler handles authenticated realtime connections. Native clients
+// additionally register/unregister FCM tokens over this same authenticated
+// channel; user/org ownership therefore comes only from validated JWT claims.
 func (a *App) WebSocketHandler(r *fastglue.Request) error {
-	// Upgrade to WebSocket immediately (unauthenticated)
+	ws.EnsureMobilePush(a.DB, a.Log)
 	up := a.wsUpgrader()
 	err := up.Upgrade(r.RequestCtx, func(conn *websocket.Conn) {
-		// Create unauthenticated client — auth happens via first message
-		client := ws.NewUnauthenticatedClient(a.WSHub, conn, a.validateWSTokenFn())
-
-		// Start pumps in goroutines
-		// Client self-registers with hub after successful auth message
+		registerPush := ws.RegisterPushFn(func(userID, orgID uuid.UUID, payload ws.PushRegistrationPayload) error {
+			return ws.RegisterMobileDevice(a.DB, a.Log, userID, orgID, payload)
+		})
+		unregisterPush := ws.UnregisterPushFn(func(userID, orgID uuid.UUID, token string) error {
+			return ws.UnregisterMobileDevice(a.DB, token, userID, orgID)
+		})
+		client := ws.NewUnauthenticatedClient(
+			a.WSHub,
+			conn,
+			a.validateWSTokenFn(),
+			registerPush,
+			unregisterPush,
+		)
 		go client.WritePump()
-		client.ReadPump() // Blocking - runs until connection closes
+		client.ReadPump()
 	})
 
 	if err != nil {
 		a.Log.Error("WebSocket upgrade failed", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "WebSocket upgrade failed", nil, "")
 	}
-
 	return nil
 }
 
-// validateWSTokenFn returns a function that validates a JWT token
-// and returns user ID and organization ID.
 func (a *App) validateWSTokenFn() ws.AuthenticateFn {
 	return func(tokenString string) (uuid.UUID, uuid.UUID, error) {
 		token, err := jwt.ParseWithClaims(tokenString, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
 			return []byte(a.Config.JWT.Secret), nil
 		})
-
 		if err != nil || !token.Valid {
 			return uuid.Nil, uuid.Nil, err
 		}
-
 		claims, ok := token.Claims.(*middleware.JWTClaims)
 		if !ok {
 			return uuid.Nil, uuid.Nil, jwt.ErrTokenInvalidClaims
 		}
-
 		return claims.UserID, claims.OrganizationID, nil
 	}
 }
