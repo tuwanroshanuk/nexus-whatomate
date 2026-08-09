@@ -183,6 +183,7 @@ func runServer(args []string) {
 
 	// Initialize WebSocket hub
 	wsHub := websocket.NewHub(lo)
+	websocket.EnsureMobilePush(db, lo)
 	go wsHub.Run()
 	lo.Info("WebSocket hub started")
 

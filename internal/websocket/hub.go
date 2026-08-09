@@ -10,21 +10,21 @@ import (
 
 // Hub maintains the set of active clients and broadcasts messages to them.
 type Hub struct {
-	clients map[uuid.UUID]map[uuid.UUID]map[*Client]struct{}
-	broadcast chan BroadcastMessage
-	register chan *Client
+	clients    map[uuid.UUID]map[uuid.UUID]map[*Client]struct{}
+	broadcast  chan BroadcastMessage
+	register   chan *Client
 	unregister chan *Client
-	mu sync.RWMutex
-	log logf.Logger
+	mu         sync.RWMutex
+	log        logf.Logger
 }
 
 func NewHub(log logf.Logger) *Hub {
 	return &Hub{
-		clients: make(map[uuid.UUID]map[uuid.UUID]map[*Client]struct{}),
-		broadcast: make(chan BroadcastMessage, 256),
-		register: make(chan *Client),
+		clients:    make(map[uuid.UUID]map[uuid.UUID]map[*Client]struct{}),
+		broadcast:  make(chan BroadcastMessage, 256),
+		register:   make(chan *Client),
 		unregister: make(chan *Client),
-		log: log,
+		log:        log,
 	}
 }
 
@@ -218,5 +218,5 @@ func (h *Hub) FilterOnlineUsers(orgID uuid.UUID, userIDs []uuid.UUID) []uuid.UUI
 	return online
 }
 
-func (h *Hub) Register(client *Client) { h.register <- client }
+func (h *Hub) Register(client *Client)   { h.register <- client }
 func (h *Hub) Unregister(client *Client) { h.unregister <- client }

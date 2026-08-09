@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	writeWait = 10 * time.Second
-	pongWait = 60 * time.Second
-	pingPeriod = (pongWait * 9) / 10
+	writeWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 2048
-	authTimeout = 5 * time.Second
+	authTimeout    = 5 * time.Second
 )
 
 // AuthenticateFn validates a JWT token and returns user ID and organization ID.
@@ -21,31 +21,32 @@ type AuthenticateFn func(token string) (uuid.UUID, uuid.UUID, error)
 
 // RegisterPushFn persists a native device token for the authenticated socket.
 type RegisterPushFn func(userID, orgID uuid.UUID, payload PushRegistrationPayload) error
+
 // UnregisterPushFn removes a native device token for the authenticated socket.
 type UnregisterPushFn func(userID, orgID uuid.UUID, token string) error
 
 // Client represents a WebSocket client connection.
 type Client struct {
-	hub *Hub
-	conn *websocket.Conn
-	send chan []byte
-	userID uuid.UUID
-	organizationID uuid.UUID
-	authenticated bool
-	authFn AuthenticateFn
-	registerPushFn RegisterPushFn
+	hub              *Hub
+	conn             *websocket.Conn
+	send             chan []byte
+	userID           uuid.UUID
+	organizationID   uuid.UUID
+	authenticated    bool
+	authFn           AuthenticateFn
+	registerPushFn   RegisterPushFn
 	unregisterPushFn UnregisterPushFn
-	currentContact *uuid.UUID
+	currentContact   *uuid.UUID
 }
 
 func NewClient(hub *Hub, conn *websocket.Conn, userID, orgID uuid.UUID) *Client {
 	return &Client{
-		hub: hub,
-		conn: conn,
-		send: make(chan []byte, 256),
-		userID: userID,
+		hub:            hub,
+		conn:           conn,
+		send:           make(chan []byte, 256),
+		userID:         userID,
 		organizationID: orgID,
-		authenticated: userID != uuid.Nil,
+		authenticated:  userID != uuid.Nil,
 	}
 }
 
@@ -53,9 +54,9 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID, orgID uuid.UUID) *Client 
 // Optional push callbacks keep existing tests/callers source-compatible.
 func NewUnauthenticatedClient(hub *Hub, conn *websocket.Conn, authFn AuthenticateFn, callbacks ...any) *Client {
 	client := &Client{
-		hub: hub,
-		conn: conn,
-		send: make(chan []byte, 256),
+		hub:    hub,
+		conn:   conn,
+		send:   make(chan []byte, 256),
 		authFn: authFn,
 	}
 	for _, callback := range callbacks {
@@ -264,7 +265,9 @@ func (c *Client) handleUnregisterPush(payload any) {
 	if err != nil {
 		return
 	}
-	var body struct{ Token string `json:"token"` }
+	var body struct {
+		Token string `json:"token"`
+	}
 	if err := json.Unmarshal(data, &body); err != nil || body.Token == "" {
 		return
 	}

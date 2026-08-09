@@ -1,9 +1,9 @@
 package websocket
 
 const (
-	TypeRegisterPushToken = "register_push_token"
+	TypeRegisterPushToken   = "register_push_token"
 	TypeUnregisterPushToken = "unregister_push_token"
-	TypePushRegistered = "push_registered"
+	TypePushRegistered      = "push_registered"
 )
 
 // PushRegistrationPayload is sent by native clients after WebSocket auth.
