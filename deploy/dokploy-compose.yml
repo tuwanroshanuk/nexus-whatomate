@@ -40,6 +40,13 @@ services:
       WHATOMATE_WHATSAPP__APP_SECRET: ${WHATOMATE_WHATSAPP__APP_SECRET:-}
       WHATOMATE_WHATSAPP__CONFIG_ID: ${WHATOMATE_WHATSAPP__CONFIG_ID:-}
 
+      # Native Android incoming calls use FCM when the app process is in the
+      # background or not running. Keep the service-account JSON in Dokploy's
+      # protected environment/secrets; never commit it to this repository.
+      WHATOMATE_FIREBASE_PROJECT_ID: ${WHATOMATE_FIREBASE_PROJECT_ID:-}
+      WHATOMATE_FIREBASE_CREDENTIALS_JSON: ${WHATOMATE_FIREBASE_CREDENTIALS_JSON:-}
+      WHATOMATE_FIREBASE_CREDENTIALS_FILE: ${WHATOMATE_FIREBASE_CREDENTIALS_FILE:-}
+
       WHATOMATE_COOKIE__DOMAIN: one.nexuscloud.uk
       WHATOMATE_COOKIE__SECURE: "true"
 
