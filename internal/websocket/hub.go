@@ -175,15 +175,20 @@ func (h *Hub) GetClientCount() int {
 	return h.countClients()
 }
 
+// IsUserOnline is also the call-routing reachability check. A live WebSocket
+// means the web/foreground client can ring immediately. A registered native
+// device means Android can be reached through high-priority FCM even when its
+// process is backgrounded or killed.
 func (h *Hub) IsUserOnline(orgID, userID uuid.UUID) bool {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
 	if orgClients, ok := h.clients[orgID]; ok {
-		if userClients, ok := orgClients[userID]; ok {
-			return len(userClients) > 0
+		if userClients, ok := orgClients[userID]; ok && len(userClients) > 0 {
+			h.mu.RUnlock()
+			return true
 		}
 	}
-	return false
+	h.mu.RUnlock()
+	return HasRegisteredMobileDevice(orgID, userID)
 }
 
 func (h *Hub) OnlineUserIDs(orgID uuid.UUID) []uuid.UUID {
@@ -202,16 +207,13 @@ func (h *Hub) OnlineUserIDs(orgID uuid.UUID) []uuid.UUID {
 	return ids
 }
 
+// FilterOnlineUsers filters by call reachability rather than only foreground
+// WebSocket presence. This keeps the existing rotation algorithm intact while
+// allowing a registered Android installation to be selected and rung by FCM.
 func (h *Hub) FilterOnlineUsers(orgID uuid.UUID, userIDs []uuid.UUID) []uuid.UUID {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	orgClients, ok := h.clients[orgID]
-	if !ok {
-		return nil
-	}
 	online := make([]uuid.UUID, 0, len(userIDs))
 	for _, uid := range userIDs {
-		if userClients, ok := orgClients[uid]; ok && len(userClients) > 0 {
+		if h.IsUserOnline(orgID, uid) {
 			online = append(online, uid)
 		}
 	}
