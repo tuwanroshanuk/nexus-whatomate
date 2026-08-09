@@ -16,6 +16,14 @@ func newUpgrader(allowedOrigins map[string]bool) websocket.FastHTTPUpgrader {
 		WriteBufferSize: 1024,
 		CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
 			origin := string(ctx.Request.Header.Peek("Origin"))
+			// Browser WebSocket connections always send Origin and must remain
+			// constrained by the configured allowlist. Native Android/Windows
+			// clients are not browsers and may legitimately omit Origin; they are
+			// still required to authenticate immediately with a short-lived
+			// /auth/ws-token before the socket is registered in the hub.
+			if origin == "" {
+				return true
+			}
 			return middleware.IsOriginAllowed(origin, allowedOrigins)
 		},
 	}
