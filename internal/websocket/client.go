@@ -9,83 +9,75 @@ import (
 )
 
 const (
-	// Time allowed to write a message to the peer
 	writeWait = 10 * time.Second
-
-	// Time allowed to read the next pong message from the peer
 	pongWait = 60 * time.Second
-
-	// Send pings to peer with this period (must be less than pongWait)
 	pingPeriod = (pongWait * 9) / 10
-
-	// Maximum message size allowed from peer
-	maxMessageSize = 512
-
-	// Time allowed to authenticate after connection
+	maxMessageSize = 2048
 	authTimeout = 5 * time.Second
 )
 
 // AuthenticateFn validates a JWT token and returns user ID and organization ID.
 type AuthenticateFn func(token string) (uuid.UUID, uuid.UUID, error)
 
-// Client represents a WebSocket client connection
+// RegisterPushFn persists a native device token for the authenticated socket.
+type RegisterPushFn func(userID, orgID uuid.UUID, payload PushRegistrationPayload) error
+// UnregisterPushFn removes a native device token for the authenticated socket.
+type UnregisterPushFn func(userID, orgID uuid.UUID, token string) error
+
+// Client represents a WebSocket client connection.
 type Client struct {
 	hub *Hub
-
-	// The websocket connection
 	conn *websocket.Conn
-
-	// Buffered channel of outbound messages
 	send chan []byte
-
-	// User information (set after authentication)
-	userID         uuid.UUID
+	userID uuid.UUID
 	organizationID uuid.UUID
-
-	// Whether the client has authenticated
 	authenticated bool
-
-	// Function to validate JWT tokens
 	authFn AuthenticateFn
-
-	// Current contact being viewed (nil if none)
+	registerPushFn RegisterPushFn
+	unregisterPushFn UnregisterPushFn
 	currentContact *uuid.UUID
 }
 
-// NewClient creates a new unauthenticated Client instance.
-// The client must authenticate via a message-based auth flow before it can
-// send/receive application messages.
 func NewClient(hub *Hub, conn *websocket.Conn, userID, orgID uuid.UUID) *Client {
 	return &Client{
-		hub:            hub,
-		conn:           conn,
-		send:           make(chan []byte, 256),
-		userID:         userID,
+		hub: hub,
+		conn: conn,
+		send: make(chan []byte, 256),
+		userID: userID,
 		organizationID: orgID,
-		authenticated:  userID != uuid.Nil, // pre-authenticated if userID is set (tests)
+		authenticated: userID != uuid.Nil,
 	}
 }
 
-// NewUnauthenticatedClient creates a client that requires message-based authentication.
-func NewUnauthenticatedClient(hub *Hub, conn *websocket.Conn, authFn AuthenticateFn) *Client {
-	return &Client{
-		hub:    hub,
-		conn:   conn,
-		send:   make(chan []byte, 256),
+// NewUnauthenticatedClient creates a client that requires message-based auth.
+// Optional push callbacks keep existing tests/callers source-compatible.
+func NewUnauthenticatedClient(hub *Hub, conn *websocket.Conn, authFn AuthenticateFn, callbacks ...any) *Client {
+	client := &Client{
+		hub: hub,
+		conn: conn,
+		send: make(chan []byte, 256),
 		authFn: authFn,
 	}
+	for _, callback := range callbacks {
+		switch fn := callback.(type) {
+		case RegisterPushFn:
+			client.registerPushFn = fn
+		case UnregisterPushFn:
+			client.unregisterPushFn = fn
+		}
+	}
+	return client
 }
 
-// ReadPump pumps messages from the websocket connection to the hub
 func (c *Client) ReadPump() {
 	defer func() {
 		if r := recover(); r != nil {
 			c.hub.log.Error("Recovered from panic in ReadPump", "error", r, "user_id", c.userID)
 		}
 		if c.authenticated {
-			c.hub.unregister <- c // Hub will close c.send
+			c.hub.unregister <- c
 		} else {
-			close(c.send) // Signal WritePump to exit for unauthenticated clients
+			close(c.send)
 		}
 		if c.conn != nil {
 			_ = c.conn.Close()
@@ -93,17 +85,13 @@ func (c *Client) ReadPump() {
 	}()
 
 	c.conn.SetReadLimit(maxMessageSize)
-
-	// If not yet authenticated, enforce auth timeout for the first message
 	if !c.authenticated {
 		_ = c.conn.SetReadDeadline(time.Now().Add(authTimeout))
-
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			c.hub.log.Warn("WebSocket auth timeout or read error", "error", err)
 			return
 		}
-
 		if !c.handleAuthMessage(message) {
 			_ = c.conn.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "authentication failed"))
@@ -111,12 +99,10 @@ func (c *Client) ReadPump() {
 		}
 	}
 
-	// Normal read loop (authenticated)
 	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error {
 		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
-
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
@@ -125,12 +111,10 @@ func (c *Client) ReadPump() {
 			}
 			break
 		}
-
 		c.handleMessage(message)
 	}
 }
 
-// WritePump pumps messages from the hub to the websocket connection
 func (c *Client) WritePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
@@ -147,31 +131,21 @@ func (c *Client) WritePump() {
 		select {
 		case message, ok := <-c.send:
 			if !ok || c.conn == nil {
-				// Hub closed the channel or connection is gone — exit immediately.
-				// Don't try to write a close frame; ReadPump may have already
-				// closed the underlying connection.
 				return
 			}
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-
-			// Only forward messages if authenticated
 			if !c.authenticated {
 				continue
 			}
-
-			// Send each message as a separate WebSocket frame
 			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
 				return
 			}
-
-			// Send any queued messages as separate frames
 			n := len(c.send)
 			for i := 0; i < n; i++ {
 				if err := c.conn.WriteMessage(websocket.TextMessage, <-c.send); err != nil {
 					return
 				}
 			}
-
 		case <-ticker.C:
 			if c.conn == nil {
 				return
@@ -184,80 +158,68 @@ func (c *Client) WritePump() {
 	}
 }
 
-// handleAuthMessage processes the first message which must be an auth message.
-// Returns true if authentication succeeded.
 func (c *Client) handleAuthMessage(data []byte) bool {
 	var msg WSMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		c.hub.log.Error("Failed to unmarshal auth message", "error", err)
 		return false
 	}
-
 	if msg.Type != TypeAuth {
 		c.hub.log.Warn("Expected auth message, got", "type", msg.Type)
 		return false
 	}
-
 	payloadBytes, err := json.Marshal(msg.Payload)
 	if err != nil {
 		return false
 	}
-
 	var authPayload AuthPayload
 	if err := json.Unmarshal(payloadBytes, &authPayload); err != nil {
 		return false
 	}
-
 	if authPayload.Token == "" || c.authFn == nil {
 		return false
 	}
-
 	userID, orgID, err := c.authFn(authPayload.Token)
 	if err != nil {
 		c.hub.log.Warn("WebSocket auth failed", "error", err)
 		return false
 	}
-
 	c.userID = userID
 	c.organizationID = orgID
 	c.authenticated = true
-
-	// Register with hub now that we're authenticated
 	c.hub.Register(c)
-
 	c.hub.log.Info("WebSocket client authenticated via message",
 		"user_id", userID, "org_id", orgID)
 	return true
 }
 
-// handleMessage processes incoming messages from the client
 func (c *Client) handleMessage(data []byte) {
 	var msg WSMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		c.hub.log.Error("Failed to unmarshal client message", "error", err)
 		return
 	}
-
 	switch msg.Type {
 	case TypeSetContact:
 		c.handleSetContact(msg.Payload)
 	case TypePing:
 		c.sendPong()
+	case TypeRegisterPushToken:
+		c.handleRegisterPush(msg.Payload)
+	case TypeUnregisterPushToken:
+		c.handleUnregisterPush(msg.Payload)
 	}
 }
 
-// handleSetContact updates the client's current contact
 func (c *Client) handleSetContact(payload any) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return
 	}
-
 	var setContact SetContactPayload
 	if err := json.Unmarshal(data, &setContact); err != nil {
 		return
 	}
-
 	if setContact.ContactID == "" {
 		c.currentContact = nil
 		c.hub.log.Debug("Client cleared current contact", "user_id", c.userID)
@@ -267,18 +229,52 @@ func (c *Client) handleSetContact(payload any) {
 			return
 		}
 		c.currentContact = &contactID
-		c.hub.log.Debug("Client set current contact",
-			"user_id", c.userID,
-			"contact_id", contactID)
+		c.hub.log.Debug("Client set current contact", "user_id", c.userID, "contact_id", contactID)
 	}
 }
 
-// SendChan returns the client's send channel for use in tests.
-func (c *Client) SendChan() <-chan []byte {
-	return c.send
+func (c *Client) handleRegisterPush(payload any) {
+	if c.registerPushFn == nil {
+		return
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	var registration PushRegistrationPayload
+	if err := json.Unmarshal(data, &registration); err != nil || registration.Token == "" {
+		return
+	}
+	if err := c.registerPushFn(c.userID, c.organizationID, registration); err != nil {
+		c.hub.log.Warn("Failed to register mobile push token", "error", err, "user_id", c.userID)
+		return
+	}
+	ack, _ := json.Marshal(WSMessage{Type: TypePushRegistered, Payload: map[string]any{"registered": true}})
+	select {
+	case c.send <- ack:
+	default:
+	}
 }
 
-// sendPong sends a pong response to the client
+func (c *Client) handleUnregisterPush(payload any) {
+	if c.unregisterPushFn == nil {
+		return
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	var body struct{ Token string `json:"token"` }
+	if err := json.Unmarshal(data, &body); err != nil || body.Token == "" {
+		return
+	}
+	if err := c.unregisterPushFn(c.userID, c.organizationID, body.Token); err != nil {
+		c.hub.log.Warn("Failed to unregister mobile push token", "error", err, "user_id", c.userID)
+	}
+}
+
+func (c *Client) SendChan() <-chan []byte { return c.send }
+
 func (c *Client) sendPong() {
 	msg := WSMessage{Type: TypePong}
 	data, _ := json.Marshal(msg)
