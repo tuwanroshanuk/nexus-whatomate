@@ -1,0 +1,53 @@
+name: Apply web incoming-call decline
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-active-call-decline.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch active call panel
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('frontend/src/components/calling/ActiveCallPanel.vue')
+          s = p.read_text()
+          old = """import { useCallingStore } from '@/stores/calling'\nimport { Button } from '@/components/ui/button'\n"""
+          new = """import { useCallingStore } from '@/stores/calling'\nimport { callTransfersService } from '@/services/api'\nimport { Button } from '@/components/ui/button'\n"""
+          if old not in s:
+              raise SystemExit('import anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """const acceptingId = ref<string | null>(null)\nconst showTransferPicker = ref(false)\n"""
+          new = """const acceptingId = ref<string | null>(null)\nconst decliningId = ref<string | null>(null)\nconst showTransferPicker = ref(false)\n"""
+          if old not in s:
+              raise SystemExit('state anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """async function handleAccept(id: string) {\n  acceptingId.value = id\n  try {\n    await store.acceptTransfer(id)\n    toast.success(t('callTransfers.callConnected'))\n  } catch (err: any) {\n    const serverMsg = err.response?.data?.message || err.message || ''\n    toast.error(t('callTransfers.acceptFailed'), {\n      description: serverMsg\n    })\n  } finally {\n    acceptingId.value = null\n  }\n}\n"""
+          new = """async function handleAccept(id: string) {\n  acceptingId.value = id\n  try {\n    await store.acceptTransfer(id)\n    toast.success(t('callTransfers.callConnected'))\n  } catch (err: any) {\n    const serverMsg = err.response?.data?.message || err.message || ''\n    toast.error(t('callTransfers.acceptFailed'), {\n      description: serverMsg\n    })\n  } finally {\n    acceptingId.value = null\n  }\n}\n\nasync function handleDecline(id: string) {\n  decliningId.value = id\n  try {\n    await callTransfersService.decline(id)\n    // Remove this agent's ringing surface immediately. The backend records\n    // this agent as tried and advances the same IVR/team transfer to the next\n    // eligible member without terminating the caller's WhatsApp leg.\n    store.waitingTransfers = store.waitingTransfers.filter(transfer => transfer.id !== id)\n    toast.success('Call declined', {\n      description: 'Routing to the next available team member.'\n    })\n  } catch (err: any) {\n    const serverMsg = err.response?.data?.error?.message || err.response?.data?.message || err.message || ''\n    toast.error('Unable to decline call', { description: serverMsg })\n  } finally {\n    decliningId.value = null\n  }\n}\n"""
+          if old not in s:
+              raise SystemExit('accept handler anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """        <!-- Hangup / Decline (red) -->\n        <Button\n          v-if=\"store.isOnCall\"\n          variant=\"ghost\"\n          size=\"sm\"\n          class=\"h-10 w-10 rounded-full p-0 !bg-red-600 !text-white hover:!bg-red-500\"\n          @click=\"store.endCall()\"\n        >\n          <PhoneOff class=\"h-4 w-4\" />\n        </Button>\n"""
+          new = """        <!-- Decline incoming transfer (red). This is routing, not hangup. -->\n        <Button\n          v-if=\"firstWaiting && !store.isOnCall\"\n          variant=\"ghost\"\n          size=\"sm\"\n          class=\"h-10 w-10 rounded-full p-0 !bg-red-600 !text-white hover:!bg-red-500\"\n          :disabled=\"decliningId === firstWaiting.id\"\n          title=\"Decline and route to next available agent\"\n          @click=\"handleDecline(firstWaiting.id)\"\n        >\n          <PhoneOff class=\"h-4 w-4\" />\n        </Button>\n\n        <!-- Hangup active call (red) -->\n        <Button\n          v-if=\"store.isOnCall\"\n          variant=\"ghost\"\n          size=\"sm\"\n          class=\"h-10 w-10 rounded-full p-0 !bg-red-600 !text-white hover:!bg-red-500\"\n          @click=\"store.endCall()\"\n        >\n          <PhoneOff class=\"h-4 w-4\" />\n        </Button>\n"""
+          if old not in s:
+              raise SystemExit('hangup button anchor not found')
+          p.write_text(s.replace(old, new, 1))
+          Path('.github/workflows/apply-active-call-decline.yml').unlink()
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(web): add decline to global incoming call panel"
+          git push
