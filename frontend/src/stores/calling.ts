@@ -467,6 +467,13 @@ export const useCallingStore = defineStore('calling', () => {
         // Another agent accepted this transfer — remove from our waiting list
         waitingTransfers.value = waitingTransfers.value.filter(t => t.id !== payload.id)
         break
+      case 'call_transfer_reassigned':
+        // This agent declined/timed out or rotation advanced to a different
+        // teammate. Remove the stale ringing card immediately; if this same
+        // agent becomes eligible in a later broadcast, a fresh waiting event
+        // will add it back.
+        waitingTransfers.value = waitingTransfers.value.filter(t => t.id !== payload.id)
+        break
       case 'call_transfer_completed':
       case 'call_transfer_abandoned':
       case 'call_transfer_no_answer':
