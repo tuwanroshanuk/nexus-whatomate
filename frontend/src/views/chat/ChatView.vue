@@ -88,7 +88,8 @@ import {
   Code,
   RotateCw,
   Filter,
-  StickyNote
+  StickyNote,
+  Trash2
 } from 'lucide-vue-next'
 import { getInitials, getAvatarGradient } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
@@ -222,6 +223,21 @@ const isServiceWindowExpired = computed(() => {
 function openTemplatePicker() {
   const btn = templatePickerRef.value?.querySelector('button')
   btn?.click()
+}
+
+async function clearCurrentConversation() {
+  const contact = contactsStore.currentContact
+  if (!contact) return
+  if (!window.confirm(`Clear the conversation with ${contact.profile_name || contact.phone_number}? The contact, call permissions, notes, tags, assignments and call history will be kept.`)) return
+  try {
+    await contactsService.clearConversation(contact.id)
+    contactsStore.clearMessages()
+    contact.last_message_at = undefined
+    await contactsStore.fetchContacts()
+    toast.success('Conversation cleared')
+  } catch (err: any) {
+    toast.error('Unable to clear conversation', { description: err.response?.data?.error?.message || err.message || '' })
+  }
 }
 
 // Add contact dialog state
@@ -702,6 +718,11 @@ function handleContactClick(contact: Contact) {
 
 async function sendMessage() {
   if (!messageInput.value.trim() || !contactsStore.currentContact) return
+  if (isServiceWindowExpired.value) {
+    toast.error('24-hour messaging window is closed. Send an approved template instead.')
+    openTemplatePicker()
+    return
+  }
 
   isSending.value = true
   try {
@@ -887,6 +908,12 @@ function handleCannedSelect(response: CannedResponse) {
 
 async function sendCannedResponse() {
   if (!contactsStore.currentContact || !selectedCannedResponse.value) return
+  if (isServiceWindowExpired.value) {
+    cannedDialogOpen.value = false
+    toast.error('24-hour messaging window is closed. Send an approved template instead.')
+    openTemplatePicker()
+    return
+  }
 
   const missing = cannedParamNames.value.some(n => !cannedParamValues.value[n]?.trim())
   if (missing) {
@@ -1645,6 +1672,12 @@ function getMediaType(mimeType: string): string {
 
 async function sendMediaMessage() {
   if (!selectedFile.value || !contactsStore.currentContact) return
+  if (isServiceWindowExpired.value) {
+    toast.error('24-hour messaging window is closed. Send an approved template instead.')
+    isMediaDialogOpen.value = false
+    openTemplatePicker()
+    return
+  }
 
   isUploadingMedia.value = true
   try {
@@ -1973,6 +2006,11 @@ async function sendMediaMessage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>{{ $t('chat.contactOptions') }}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem class="text-red-500 focus:text-red-500" @click="clearCurrentConversation">
+                  <Trash2 class="mr-2 h-4 w-4" />
+                  <span>Clear conversation</span>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem v-if="canAssignContacts" @click="isAssignDialogOpen = true">
                   <UserPlus class="mr-2 h-4 w-4" />

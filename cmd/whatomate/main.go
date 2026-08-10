@@ -662,6 +662,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Messages
 	g.GET("/api/contacts/{id}/messages", app.GetMessages)
 	g.POST("/api/contacts/{id}/messages", app.SendMessage)
+	g.DELETE("/api/contacts/{id}/conversation", app.DeleteConversation)
 	g.POST("/api/contacts/{id}/mark-read", app.MarkContactRead)
 	g.POST("/api/contacts/{id}/messages/{message_id}/reaction", app.SendReaction)
 	g.POST("/api/messages", app.SendMessage) // Legacy route
@@ -864,6 +865,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// Call Logs
 	g.GET("/api/call-logs", app.ListCallLogs)
+	g.DELETE("/api/call-logs/history", app.ClearCallHistory)
 	g.GET("/api/call-logs/{id}", app.GetCallLog)
 	g.GET("/api/call-logs/{id}/recording", app.GetCallRecording)
 
@@ -871,6 +873,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/call-transfers", app.ListCallTransfers)
 	g.GET("/api/call-transfers/{id}", app.GetCallTransfer)
 	g.POST("/api/call-transfers/{id}/connect", app.ConnectCallTransfer)
+	g.POST("/api/call-transfers/{id}/decline", app.DeclineCallTransfer)
 	g.POST("/api/call-transfers/{id}/hangup", app.HangupCallTransfer)
 	g.POST("/api/call-transfers/initiate", app.InitiateAgentTransfer)
 

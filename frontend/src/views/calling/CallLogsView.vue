@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Phone, PhoneIncoming, PhoneOutgoing, PhoneOff, PhoneMissed, Clock, RefreshCw, Mic, User, Monitor, Headphones, ArrowRightLeft } from 'lucide-vue-next'
+import { Phone, PhoneIncoming, PhoneOutgoing, PhoneOff, PhoneMissed, Clock, RefreshCw, Mic, User, Monitor, Headphones, ArrowRightLeft, Trash2 } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
 import DataTable from '@/components/shared/DataTable.vue'
 import type { Column } from '@/components/shared/types'
 import SearchInput from '@/components/shared/SearchInput.vue'
@@ -82,6 +83,18 @@ async function fetchLogs() {
 function handlePageChange(page: number) {
   currentPage.value = page
   fetchLogs()
+}
+
+async function clearCallHistory() {
+  if (!window.confirm('Clear finished call history? Active, ringing, and transferring calls will not be affected.')) return
+  try {
+    const response = await callLogsService.clearHistory()
+    const data = (response.data as any).data ?? response.data
+    await fetchLogs()
+    toast.success('Call history cleared', { description: `${data?.deleted ?? 0} finished record(s) removed.` })
+  } catch (err: any) {
+    toast.error('Unable to clear call history', { description: err.response?.data?.error?.message || err.message || '' })
+  }
 }
 
 async function viewDetail(log: CallLog) {
@@ -223,10 +236,16 @@ watch(phoneSearch, () => {
         <h1 class="text-2xl font-bold">{{ t('calling.callLogs') }}</h1>
         <p class="text-muted-foreground">{{ t('calling.callLogsDesc') }}</p>
       </div>
-      <Button variant="outline" size="sm" @click="fetchLogs">
-        <RefreshCw class="h-4 w-4 mr-2" />
-        {{ t('common.refresh') }}
-      </Button>
+      <div class="flex items-center gap-2">
+        <Button variant="destructive" size="sm" @click="clearCallHistory">
+          <Trash2 class="h-4 w-4 mr-2" />
+          Clear history
+        </Button>
+        <Button variant="outline" size="sm" @click="fetchLogs">
+          <RefreshCw class="h-4 w-4 mr-2" />
+          {{ t('common.refresh') }}
+        </Button>
+      </div>
     </div>
 
     <!-- Error State -->

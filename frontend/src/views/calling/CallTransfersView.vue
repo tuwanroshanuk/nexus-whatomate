@@ -71,6 +71,18 @@ async function handleAccept(id: string) {
   }
 }
 
+async function handleDecline(id: string) {
+  try {
+    await callTransfersService.decline(id)
+    store.waitingTransfers = store.waitingTransfers.filter(transfer => transfer.id !== id)
+    toast.success('Call declined', { description: 'Routing to the next available team member.' })
+  } catch (err: any) {
+    toast.error('Unable to decline call', {
+      description: err.response?.data?.error?.message || err.message || ''
+    })
+  }
+}
+
 function formatDuration(seconds: number): string {
   if (!seconds) return '-'
   const m = Math.floor(seconds / 60)
@@ -148,14 +160,24 @@ onMounted(() => {
                 {{ formatDate(transfer.transferred_at) }}
               </template>
               <template #cell-actions="{ item: transfer }">
-                <Button
-                  size="sm"
-                  class="bg-pink-600 hover:bg-pink-500 text-white"
-                  @click="handleAccept(transfer.id)"
-                >
-                  <Phone class="h-3.5 w-3.5 mr-1" />
-                  {{ t('callTransfers.accept') }}
-                </Button>
+                <div class="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    class="bg-pink-600 hover:bg-pink-500 text-white"
+                    @click="handleAccept(transfer.id)"
+                  >
+                    <Phone class="h-3.5 w-3.5 mr-1" />
+                    {{ t('callTransfers.accept') }}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    @click="handleDecline(transfer.id)"
+                  >
+                    <PhoneOff class="h-3.5 w-3.5 mr-1" />
+                    Decline
+                  </Button>
+                </div>
               </template>
             </DataTable>
           </CardContent>

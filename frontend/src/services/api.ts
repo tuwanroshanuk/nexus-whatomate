@@ -195,6 +195,7 @@ export const contactsService = {
   create: (data: any) => api.post('/contacts', data),
   update: (id: string, data: any) => api.put(`/contacts/${id}`, data),
   delete: (id: string) => api.delete(`/contacts/${id}`),
+  clearConversation: (id: string) => api.delete(`/contacts/${id}/conversation`),
   assign: (id: string, userId: string | null) =>
     api.put(`/contacts/${id}/assign`, { user_id: userId }),
   updateTags: (id: string, tags: string[]) =>
@@ -1225,6 +1226,7 @@ export const callLogsService = {
     api.post<{ status: string }>(`/call-logs/${id}/hold`),
   resume: (id: string) =>
     api.post<{ status: string }>(`/call-logs/${id}/resume`),
+  clearHistory: () => api.delete<{ status: string; deleted: number }>('/call-logs/history'),
 }
 
 export const callTransfersService = {
@@ -1233,6 +1235,7 @@ export const callTransfersService = {
   get: (id: string) => api.get<CallTransfer>(`/call-transfers/${id}`),
   connect: (id: string, sdpOffer: string) =>
     api.post<{ sdp_answer: string }>(`/call-transfers/${id}/connect`, { sdp_offer: sdpOffer }),
+  decline: (id: string) => api.post<{ status: string; routing: string }>(`/call-transfers/${id}/decline`),
   hangup: (id: string) =>
     api.post(`/call-transfers/${id}/hangup`),
   initiate: (data: { call_log_id: string; team_id: string; agent_id?: string }) =>
