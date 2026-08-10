@@ -43,6 +43,7 @@ func (m *Manager) endSession(session *CallSession, reason, initiator string) {
 
 		session.mu.Lock()
 		startedAt := session.StartedAt
+		direction := session.Direction
 		if session.Cancel != nil {
 			session.Cancel()
 		}
@@ -55,6 +56,19 @@ func (m *Manager) endSession(session *CallSession, reason, initiator string) {
 			"initiator", initiator,
 			"age_ms", time.Since(startedAt).Milliseconds(),
 		)
+
+		// Agent/Flutter process loss reaches the legacy EndCall path from the
+		// outgoing agent PeerConnection callback. Generic WebRTC cleanup alone
+		// only closes local peer resources; it does not guarantee that Meta's
+		// WhatsApp call leg receives a terminate command. Force termination here
+		// for that specific outgoing-disconnect path so swiping/killing the app
+		// cannot leave the remote party in an orphaned call.
+		//
+		// Explicit user Hang Up does NOT come through this branch; it continues
+		// to use HangupOutgoingCall, preserving configured outgoing_end IVR.
+		if direction == models.CallDirectionOutgoing && initiator == "EndCall" {
+			m.terminateCallBySession(session)
+		}
 
 		m.cleanupSession(session.ID)
 		sessionTerminations.Delete(session)
