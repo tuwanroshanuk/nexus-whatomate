@@ -27,6 +27,12 @@ func TestTriedAgentUUIDsEmpty(t *testing.T) {
 	}
 }
 
+func TestTriedAgentUUIDsInvalidOnly(t *testing.T) {
+	if got := triedAgentUUIDs(models.JSONBArray{"invalid", "still-invalid"}); len(got) != 0 {
+		t.Fatalf("expected invalid values to be ignored, got %v", got)
+	}
+}
+
 func TestContainsAgent(t *testing.T) {
 	first := uuid.New()
 	second := uuid.New()
