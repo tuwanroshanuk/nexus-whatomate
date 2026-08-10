@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useCallingStore } from '@/stores/calling'
+import { callTransfersService } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Phone, PhoneOff, PhoneIncoming, Mic, MicOff, ArrowRightLeft, Pause, Play } from 'lucide-vue-next'
 import CallTransferPicker from '@/components/calling/CallTransferPicker.vue'
@@ -10,6 +11,7 @@ import { toast } from 'vue-sonner'
 const { t } = useI18n()
 const store = useCallingStore()
 const acceptingId = ref<string | null>(null)
+const decliningId = ref<string | null>(null)
 const showTransferPicker = ref(false)
 
 const formattedDuration = computed(() => {
@@ -71,6 +73,25 @@ async function handleAccept(id: string) {
     })
   } finally {
     acceptingId.value = null
+  }
+}
+
+async function handleDecline(id: string) {
+  decliningId.value = id
+  try {
+    await callTransfersService.decline(id)
+    // Remove this agent's ringing surface immediately. The backend records
+    // this agent as tried and advances the same IVR/team transfer to the next
+    // eligible member without terminating the caller's WhatsApp leg.
+    store.waitingTransfers = store.waitingTransfers.filter(transfer => transfer.id !== id)
+    toast.success('Call declined', {
+      description: 'Routing to the next available team member.'
+    })
+  } catch (err: any) {
+    const serverMsg = err.response?.data?.error?.message || err.response?.data?.message || err.message || ''
+    toast.error('Unable to decline call', { description: serverMsg })
+  } finally {
+    decliningId.value = null
   }
 }
 </script>
@@ -155,7 +176,20 @@ async function handleAccept(id: string) {
           <Phone class="h-4 w-4" />
         </Button>
 
-        <!-- Hangup / Decline (red) -->
+        <!-- Decline incoming transfer (red). This is routing, not hangup. -->
+        <Button
+          v-if="firstWaiting && !store.isOnCall"
+          variant="ghost"
+          size="sm"
+          class="h-10 w-10 rounded-full p-0 !bg-red-600 !text-white hover:!bg-red-500"
+          :disabled="decliningId === firstWaiting.id"
+          title="Decline and route to next available agent"
+          @click="handleDecline(firstWaiting.id)"
+        >
+          <PhoneOff class="h-4 w-4" />
+        </Button>
+
+        <!-- Hangup active call (red) -->
         <Button
           v-if="store.isOnCall"
           variant="ghost"
