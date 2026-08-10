@@ -1,0 +1,35 @@
+name: Apply transfer reassignment UI sync
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-transfer-reassigned-ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch web calling store
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('frontend/src/stores/calling.ts')
+          s = p.read_text()
+          old = """      case 'call_transfer_connected':\n        // Another agent accepted this transfer — remove from our waiting list\n        waitingTransfers.value = waitingTransfers.value.filter(t => t.id !== payload.id)\n        break\n      case 'call_transfer_completed':\n"""
+          new = """      case 'call_transfer_connected':\n        // Another agent accepted this transfer — remove from our waiting list\n        waitingTransfers.value = waitingTransfers.value.filter(t => t.id !== payload.id)\n        break\n      case 'call_transfer_reassigned':\n        // This agent declined/timed out or rotation advanced to a different\n        // teammate. Remove the stale ringing card immediately; if this same\n        // agent becomes eligible in a later broadcast, a fresh waiting event\n        // will add it back.\n        waitingTransfers.value = waitingTransfers.value.filter(t => t.id !== payload.id)\n        break\n      case 'call_transfer_completed':\n"""
+          if old not in s:
+              raise SystemExit('calling.ts transfer event anchor not found')
+          p.write_text(s.replace(old, new, 1))
+          Path('.github/workflows/apply-transfer-reassigned-ui.yml').unlink()
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(web): clear reassigned team calls from old agent"
+          git push
