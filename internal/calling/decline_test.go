@@ -21,6 +21,12 @@ func TestTriedAgentUUIDsDeduplicatesAndSkipsInvalid(t *testing.T) {
 	}
 }
 
+func TestTriedAgentUUIDsEmpty(t *testing.T) {
+	if got := triedAgentUUIDs(nil); len(got) != 0 {
+		t.Fatalf("expected an empty exclusion set, got %v", got)
+	}
+}
+
 func TestContainsAgent(t *testing.T) {
 	first := uuid.New()
 	second := uuid.New()
