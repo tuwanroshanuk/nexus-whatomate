@@ -1,0 +1,103 @@
+name: Apply platform parity patch
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-platform-parity-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply guarded API and web UI patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              s = p.read_text()
+              actual = s.count(old)
+              if actual < count:
+                  raise SystemExit(f"{path}: expected at least {count} anchor(s), found {actual}: {old[:120]!r}")
+              s = s.replace(old, new, count)
+              p.write_text(s)
+
+          # Backend routes. Static call-log route stays before /{id}.
+          replace('cmd/whatomate/main.go',
+              'g.GET("/api/contacts/{id}/messages", app.GetMessages)\n\tg.POST("/api/contacts/{id}/messages", app.SendMessage)',
+              'g.GET("/api/contacts/{id}/messages", app.GetMessages)\n\tg.POST("/api/contacts/{id}/messages", app.SendMessage)\n\tg.DELETE("/api/contacts/{id}/conversation", app.DeleteConversation)')
+          replace('cmd/whatomate/main.go',
+              'g.GET("/api/call-logs", app.ListCallLogs)\n\tg.GET("/api/call-logs/{id}", app.GetCallLog)',
+              'g.GET("/api/call-logs", app.ListCallLogs)\n\tg.DELETE("/api/call-logs/history", app.ClearCallHistory)\n\tg.GET("/api/call-logs/{id}", app.GetCallLog)')
+          replace('cmd/whatomate/main.go',
+              'g.POST("/api/call-transfers/{id}/connect", app.ConnectCallTransfer)\n\tg.POST("/api/call-transfers/{id}/hangup", app.HangupCallTransfer)',
+              'g.POST("/api/call-transfers/{id}/connect", app.ConnectCallTransfer)\n\tg.POST("/api/call-transfers/{id}/decline", app.DeclineCallTransfer)\n\tg.POST("/api/call-transfers/{id}/hangup", app.HangupCallTransfer)')
+
+          # Web API client.
+          replace('frontend/src/services/api.ts',
+              "  delete: (id: string) => api.delete(`/contacts/${id}`),\n  assign:",
+              "  delete: (id: string) => api.delete(`/contacts/${id}`),\n  clearConversation: (id: string) => api.delete(`/contacts/${id}/conversation`),\n  assign:")
+          replace('frontend/src/services/api.ts',
+              "  resume: (id: string) =>\n    api.post<{ status: string }>(`/call-logs/${id}/resume`),\n}",
+              "  resume: (id: string) =>\n    api.post<{ status: string }>(`/call-logs/${id}/resume`),\n  clearHistory: () => api.delete<{ status: string; deleted: number }>('/call-logs/history'),\n}")
+          replace('frontend/src/services/api.ts',
+              "  connect: (id: string, sdpOffer: string) =>\n    api.post<{ sdp_answer: string }>(`/call-transfers/${id}/connect`, { sdp_offer: sdpOffer }),\n  hangup:",
+              "  connect: (id: string, sdpOffer: string) =>\n    api.post<{ sdp_answer: string }>(`/call-transfers/${id}/connect`, { sdp_offer: sdpOffer }),\n  decline: (id: string) => api.post<{ status: string; routing: string }>(`/call-transfers/${id}/decline`),\n  hangup:")
+
+          # Web transfer queue: Answer + Decline.
+          replace('frontend/src/views/calling/CallTransfersView.vue',
+              "async function handleAccept(id: string) {\n  try {\n    await store.acceptTransfer(id)\n    toast.success(t('callTransfers.callConnected'))\n  } catch (err: any) {\n    toast.error(t('callTransfers.acceptFailed'), {\n      description: err.message || ''\n    })\n  }\n}\n",
+              "async function handleAccept(id: string) {\n  try {\n    await store.acceptTransfer(id)\n    toast.success(t('callTransfers.callConnected'))\n  } catch (err: any) {\n    toast.error(t('callTransfers.acceptFailed'), {\n      description: err.message || ''\n    })\n  }\n}\n\nasync function handleDecline(id: string) {\n  try {\n    await callTransfersService.decline(id)\n    store.waitingTransfers = store.waitingTransfers.filter(transfer => transfer.id !== id)\n    toast.success('Call declined', { description: 'Routing to the next available team member.' })\n  } catch (err: any) {\n    toast.error('Unable to decline call', {\n      description: err.response?.data?.error?.message || err.message || ''\n    })\n  }\n}\n")
+          replace('frontend/src/views/calling/CallTransfersView.vue',
+              '''              <template #cell-actions="{ item: transfer }">\n                <Button\n                  size="sm"\n                  class="bg-pink-600 hover:bg-pink-500 text-white"\n                  @click="handleAccept(transfer.id)"\n                >\n                  <Phone class="h-3.5 w-3.5 mr-1" />\n                  {{ t('callTransfers.accept') }}\n                </Button>\n              </template>''',
+              '''              <template #cell-actions="{ item: transfer }">\n                <div class="flex items-center gap-2">\n                  <Button\n                    size="sm"\n                    class="bg-pink-600 hover:bg-pink-500 text-white"\n                    @click="handleAccept(transfer.id)"\n                  >\n                    <Phone class="h-3.5 w-3.5 mr-1" />\n                    {{ t('callTransfers.accept') }}\n                  </Button>\n                  <Button\n                    size="sm"\n                    variant="destructive"\n                    @click="handleDecline(transfer.id)"\n                  >\n                    <PhoneOff class="h-3.5 w-3.5 mr-1" />\n                    Decline\n                  </Button>\n                </div>\n              </template>''')
+
+          # Web call history: guarded terminal-record clear.
+          replace('frontend/src/views/calling/CallLogsView.vue',
+              "import { Phone, PhoneIncoming, PhoneOutgoing, PhoneOff, PhoneMissed, Clock, RefreshCw, Mic, User, Monitor, Headphones, ArrowRightLeft } from 'lucide-vue-next'",
+              "import { Phone, PhoneIncoming, PhoneOutgoing, PhoneOff, PhoneMissed, Clock, RefreshCw, Mic, User, Monitor, Headphones, ArrowRightLeft, Trash2 } from 'lucide-vue-next'\nimport { toast } from 'vue-sonner'")
+          replace('frontend/src/views/calling/CallLogsView.vue',
+              "function handlePageChange(page: number) {\n  currentPage.value = page\n  fetchLogs()\n}\n",
+              "function handlePageChange(page: number) {\n  currentPage.value = page\n  fetchLogs()\n}\n\nasync function clearCallHistory() {\n  if (!window.confirm('Clear finished call history? Active, ringing, and transferring calls will not be affected.')) return\n  try {\n    const response = await callLogsService.clearHistory()\n    const data = (response.data as any).data ?? response.data\n    await fetchLogs()\n    toast.success('Call history cleared', { description: `${data?.deleted ?? 0} finished record(s) removed.` })\n  } catch (err: any) {\n    toast.error('Unable to clear call history', { description: err.response?.data?.error?.message || err.message || '' })\n  }\n}\n")
+          replace('frontend/src/views/calling/CallLogsView.vue',
+              '''      <Button variant="outline" size="sm" @click="fetchLogs">\n        <RefreshCw class="h-4 w-4 mr-2" />\n        {{ t('common.refresh') }}\n      </Button>''',
+              '''      <div class="flex items-center gap-2">\n        <Button variant="destructive" size="sm" @click="clearCallHistory">\n          <Trash2 class="h-4 w-4 mr-2" />\n          Clear history\n        </Button>\n        <Button variant="outline" size="sm" @click="fetchLogs">\n          <RefreshCw class="h-4 w-4 mr-2" />\n          {{ t('common.refresh') }}\n        </Button>\n      </div>''', 1)
+
+          # Web chat: safe clear-conversation action and hard guard for free-form
+          # sends outside WhatsApp's customer-service window. Templates remain allowed.
+          replace('frontend/src/views/chat/ChatView.vue',
+              "  StickyNote\n} from 'lucide-vue-next'",
+              "  StickyNote,\n  Trash2\n} from 'lucide-vue-next'")
+          replace('frontend/src/views/chat/ChatView.vue',
+              "function openTemplatePicker() {\n  const btn = templatePickerRef.value?.querySelector('button')\n  btn?.click()\n}\n",
+              "function openTemplatePicker() {\n  const btn = templatePickerRef.value?.querySelector('button')\n  btn?.click()\n}\n\nasync function clearCurrentConversation() {\n  const contact = contactsStore.currentContact\n  if (!contact) return\n  if (!window.confirm(`Clear the conversation with ${contact.profile_name || contact.phone_number}? The contact, call permissions, notes, tags, assignments and call history will be kept.`)) return\n  try {\n    await contactsService.clearConversation(contact.id)\n    contactsStore.clearMessages()\n    contact.last_message_at = undefined\n    await contactsStore.fetchContacts()\n    toast.success('Conversation cleared')\n  } catch (err: any) {\n    toast.error('Unable to clear conversation', { description: err.response?.data?.error?.message || err.message || '' })\n  }\n}\n")
+          replace('frontend/src/views/chat/ChatView.vue',
+              "async function sendMessage() {\n  if (!messageInput.value.trim() || !contactsStore.currentContact) return\n\n  isSending.value = true",
+              "async function sendMessage() {\n  if (!messageInput.value.trim() || !contactsStore.currentContact) return\n  if (isServiceWindowExpired.value) {\n    toast.error('24-hour messaging window is closed. Send an approved template instead.')\n    openTemplatePicker()\n    return\n  }\n\n  isSending.value = true")
+          replace('frontend/src/views/chat/ChatView.vue',
+              "async function sendCannedResponse() {\n  if (!contactsStore.currentContact || !selectedCannedResponse.value) return\n",
+              "async function sendCannedResponse() {\n  if (!contactsStore.currentContact || !selectedCannedResponse.value) return\n  if (isServiceWindowExpired.value) {\n    cannedDialogOpen.value = false\n    toast.error('24-hour messaging window is closed. Send an approved template instead.')\n    openTemplatePicker()\n    return\n  }\n")
+          replace('frontend/src/views/chat/ChatView.vue',
+              "async function sendMediaMessage() {\n  if (!selectedFile.value || !contactsStore.currentContact) return\n\n  isUploadingMedia.value = true",
+              "async function sendMediaMessage() {\n  if (!selectedFile.value || !contactsStore.currentContact) return\n  if (isServiceWindowExpired.value) {\n    toast.error('24-hour messaging window is closed. Send an approved template instead.')\n    isMediaDialogOpen.value = false\n    openTemplatePicker()\n    return\n  }\n\n  isUploadingMedia.value = true")
+          replace('frontend/src/views/chat/ChatView.vue',
+              '''              <DropdownMenuContent align="end">\n                <DropdownMenuLabel>{{ $t('chat.contactOptions') }}</DropdownMenuLabel>\n                <DropdownMenuSeparator />\n                <DropdownMenuItem v-if="canAssignContacts" @click="isAssignDialogOpen = true">''',
+              '''              <DropdownMenuContent align="end">\n                <DropdownMenuLabel>{{ $t('chat.contactOptions') }}</DropdownMenuLabel>\n                <DropdownMenuSeparator />\n                <DropdownMenuItem class="text-red-500 focus:text-red-500" @click="clearCurrentConversation">\n                  <Trash2 class="mr-2 h-4 w-4" />\n                  <span>Clear conversation</span>\n                </DropdownMenuItem>\n                <DropdownMenuSeparator />\n                <DropdownMenuItem v-if="canAssignContacts" @click="isAssignDialogOpen = true">''')
+
+          # Remove this one-shot workflow in the same bot commit.
+          Path('.github/workflows/apply-platform-parity-patch.yml').unlink()
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(platforms): add decline and safe history controls"
+          git push
