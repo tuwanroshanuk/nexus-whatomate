@@ -277,11 +277,6 @@ const messagesScroll = useInfiniteScroll({
     await messagesScroll.preserveScrollPosition(async () => {
       await contactsStore.fetchOlderMessages(contactsStore.currentContact!.id, selectedAccount.value || undefined)
       await nextTick()
-      // Load media for any new messages
-      try {
-      } catch (e) {
-        console.error('Error loading media:', e)
-      }
     })
   },
   hasMore: computed(() => contactsStore.hasMoreMessages),
@@ -638,11 +633,6 @@ async function selectContact(id: string) {
     wsService.setCurrentContact(id)
     // Wait for DOM to render messages before scrolling
     await nextTick()
-    // Load media for messages after messages are fetched
-    try {
-    } catch (e) {
-      console.error('Error loading media:', e)
-    }
     // Scroll after a brief delay to ensure content is rendered (instant on initial load)
     setTimeout(() => {
       scrollToBottom(true)
@@ -697,24 +687,12 @@ watch(() => contactsStore.messages.length, (newLen, oldLen) => {
   }
 })
 
-// Watch for messages changes to load media
-watch(() => contactsStore.messages, () => {
-  try {
-  } catch (e) {
-    console.error('Error loading media:', e)
-  }
-}, { deep: true })
-
 async function switchAccount(accountName: string) {
   if (!contactsStore.currentContact || accountName === selectedAccount.value) return
   selectedAccount.value = accountName
   contactsStore.setAccountFilter(accountName)
   await contactsStore.fetchMessages(contactsStore.currentContact.id, { account: accountName })
   await nextTick()
-  try {
-  } catch (e) {
-    console.error('Error loading media:', e)
-  }
   scrollToBottom(true)
 }
 
@@ -2065,7 +2043,7 @@ async function sendMediaMessage() {
               :class="[
                 'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all',
                 acct.name === selectedAccount
-                  ? 'bg-pink-600 text-white shadow-sm'
+                  ? 'bg-emerald-600 bg-[#0738f9] text-white shadow-sm'
                   : 'bg-white/[0.08] text-white/70 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
               ]"
               @click="switchAccount(acct.name)"

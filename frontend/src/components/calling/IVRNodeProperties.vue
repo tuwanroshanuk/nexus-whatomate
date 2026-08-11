@@ -54,7 +54,9 @@ async function loadTTSOptions() {
         const voicesRes = await ttsService.getGoogleCloudVoices()
         const voicesData = (voicesRes.data as any)?.data || voicesRes.data
         googleCloudVoices.value = voicesData.voices || []
-      } catch {}
+      } catch {
+        // Voice discovery is optional; provider settings remain editable.
+      }
     }
   } catch {
     // TTS can be disabled server-side; keep the normal audio editor usable.
