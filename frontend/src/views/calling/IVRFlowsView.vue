@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-import { Plus, Pencil, Trash2, Phone, RefreshCw } from 'lucide-vue-next'
+import { Plus, Pencil, Trash2, Phone, RefreshCw, ArrowRightLeft } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import DeleteConfirmDialog from '@/components/shared/DeleteConfirmDialog.vue'
@@ -31,6 +31,12 @@ const deletingFlow = ref<IVRFlow | null>(null)
 const deleting = ref(false)
 const saving = ref(false)
 const fetchError = ref(false)
+
+// Change-account state
+const showChangeAccountDialog = ref(false)
+const changingFlow = ref<IVRFlow | null>(null)
+const selectedAccount = ref('')
+const changingAccount = ref(false)
 
 // Toggle confirmation state
 const showToggleActiveConfirm = ref(false)
@@ -61,6 +67,57 @@ function openEdit(flow: IVRFlow) {
   router.push({ name: 'ivr-flow-editor', params: { id: flow.id } })
 }
 
+function openChangeAccount(flow: IVRFlow) {
+  changingFlow.value = flow
+  selectedAccount.value = flow.whatsapp_account || ''
+  showChangeAccountDialog.value = true
+}
+
+async function changeAccount() {
+  const flow = changingFlow.value
+  const nextAccount = selectedAccount.value.trim()
+  if (!flow || !nextAccount) return
+  if (nextAccount === flow.whatsapp_account) {
+    showChangeAccountDialog.value = false
+    changingFlow.value = null
+    return
+  }
+
+  changingAccount.value = true
+  try {
+    // Update in two phases when this flow owns a per-account singleton role.
+    // The backend's IVR update path evaluates Call Start/Outgoing End uniqueness
+    // against the flow's current account. Clearing the role while moving, then
+    // restoring it after the account has changed, makes the second update
+    // evaluate uniqueness against the destination account and prevents two
+    // Call Start (or Outgoing End) flows on the same WhatsApp account.
+    if (flow.is_call_start || flow.is_outgoing_end) {
+      await store.updateIVRFlow(flow.id, {
+        whatsapp_account: nextAccount,
+        is_active: flow.is_active,
+        is_call_start: false,
+        is_outgoing_end: false,
+      })
+    }
+
+    await store.updateIVRFlow(flow.id, {
+      whatsapp_account: nextAccount,
+      is_active: flow.is_active,
+      is_call_start: flow.is_call_start,
+      is_outgoing_end: flow.is_outgoing_end,
+    })
+
+    await store.fetchIVRFlows()
+    toast.success(`IVR flow moved to ${nextAccount}`)
+    showChangeAccountDialog.value = false
+    changingFlow.value = null
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message || t('calling.flowSaveFailed'))
+  } finally {
+    changingAccount.value = false
+  }
+}
+
 function confirmDelete(flow: IVRFlow) {
   deletingFlow.value = flow
   showDeleteConfirm.value = true
@@ -78,7 +135,6 @@ async function createFlow() {
 
   saving.value = true
   try {
-    // Create with empty v2 flow data
     const emptyFlow: IVRFlowData = {
       version: 2,
       nodes: [],
@@ -92,7 +148,6 @@ async function createFlow() {
       menu: emptyFlow,
     })
     showCreateDialog.value = false
-    // Navigate to the editor
     const created = (flow as any)?.data?.data || (flow as any)?.data || flow
     if (created?.id) {
       router.push({ name: 'ivr-flow-editor', params: { id: created.id } })
@@ -206,7 +261,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Fetch Error -->
     <ErrorState
       v-if="fetchError"
       :title="t('common.error')"
@@ -215,7 +269,6 @@ onMounted(async () => {
       @retry="loadFlows"
     />
 
-    <!-- Flows Table -->
     <Card v-if="!fetchError">
       <CardContent class="pt-6">
         <Table>
@@ -236,7 +289,18 @@ onMounted(async () => {
                   <p v-if="flow.description" class="text-sm text-muted-foreground">{{ flow.description }}</p>
                 </div>
               </TableCell>
-              <TableCell>{{ flow.whatsapp_account }}</TableCell>
+              <TableCell>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="h-8 -ml-2 gap-2 font-normal"
+                  title="Change WhatsApp account"
+                  @click="openChangeAccount(flow)"
+                >
+                  {{ flow.whatsapp_account }}
+                  <ArrowRightLeft class="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              </TableCell>
               <TableCell>
                 <div class="flex gap-1.5">
                   <Badge
@@ -262,19 +326,19 @@ onMounted(async () => {
                   >
                     {{ flow.is_call_start ? t('calling.callStart') : t('calling.secondary') }}
                   </Badge>
-                  <Badge
-                    v-if="flow.is_active && flow.is_outgoing_end"
-                    variant="default"
-                  >
+                  <Badge v-if="flow.is_active && flow.is_outgoing_end" variant="default">
                     {{ t('calling.outgoingEnd') }}
                   </Badge>
                 </div>
               </TableCell>
-              <TableCell>
-                {{ flow.menu?.nodes?.length || 0 }} nodes
-              </TableCell>
+              <TableCell>{{ flow.menu?.nodes?.length || 0 }} nodes</TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-2">
+                  <IconButton
+                    :icon="ArrowRightLeft"
+                    label="Change WhatsApp account"
+                    @click="openChangeAccount(flow)"
+                  />
                   <IconButton
                     :icon="Pencil"
                     :label="t('calling.editFlowAriaLabel', { name: flow.name })"
@@ -294,9 +358,7 @@ onMounted(async () => {
                 <div class="flex flex-col items-center gap-2 text-muted-foreground">
                   <Phone class="h-8 w-8" />
                   <p>{{ t('calling.noIVRFlows') }}</p>
-                  <Button variant="outline" size="sm" @click="openCreate">
-                    {{ t('calling.createFirstFlow') }}
-                  </Button>
+                  <Button variant="outline" size="sm" @click="openCreate">{{ t('calling.createFirstFlow') }}</Button>
                 </div>
               </TableCell>
             </TableRow>
@@ -309,14 +371,11 @@ onMounted(async () => {
       </CardContent>
     </Card>
 
-    <!-- Create Dialog -->
     <Dialog v-model:open="showCreateDialog">
       <DialogContent class="max-w-md">
         <DialogHeader>
           <DialogTitle>{{ t('calling.createFlow') }}</DialogTitle>
-          <DialogDescription>
-            {{ t('calling.flowEditorDesc') }}
-          </DialogDescription>
+          <DialogDescription>{{ t('calling.flowEditorDesc') }}</DialogDescription>
         </DialogHeader>
 
         <div class="space-y-4">
@@ -327,13 +386,9 @@ onMounted(async () => {
           <div class="space-y-2">
             <Label>{{ t('calling.account') }}</Label>
             <Select v-model="createForm.whatsapp_account">
-              <SelectTrigger>
-                <SelectValue :placeholder="t('calling.selectAccount')" />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue :placeholder="t('calling.selectAccount')" /></SelectTrigger>
               <SelectContent>
-                <SelectItem v-for="acc in accounts" :key="acc.name" :value="acc.name">
-                  {{ acc.name }}
-                </SelectItem>
+                <SelectItem v-for="acc in accounts" :key="acc.name" :value="acc.name">{{ acc.name }}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -353,7 +408,33 @@ onMounted(async () => {
       </DialogContent>
     </Dialog>
 
-    <!-- Delete Confirmation -->
+    <Dialog v-model:open="showChangeAccountDialog">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Change WhatsApp account</DialogTitle>
+          <DialogDescription>
+            Move “{{ changingFlow?.name }}” to another WhatsApp account. Call Start and Outgoing Post-Call ownership will be re-applied on the destination account.
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-2">
+          <Label>{{ t('calling.account') }}</Label>
+          <Select v-model="selectedAccount">
+            <SelectTrigger><SelectValue :placeholder="t('calling.selectAccount')" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="acc in accounts" :key="acc.name" :value="acc.name">{{ acc.name }}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" :disabled="changingAccount" @click="showChangeAccountDialog = false">{{ t('common.cancel') }}</Button>
+          <Button :disabled="changingAccount || !selectedAccount" @click="changeAccount">
+            <span v-if="changingAccount" class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+            Change account
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <DeleteConfirmDialog
       v-model:open="showDeleteConfirm"
       :title="t('calling.deleteFlow')"
@@ -363,7 +444,6 @@ onMounted(async () => {
       @confirm="deleteFlow"
     />
 
-    <!-- Toggle Active Confirmation -->
     <ConfirmDialog
       v-model:open="showToggleActiveConfirm"
       :title="t('calling.toggleActiveConfirmTitle')"
@@ -372,7 +452,6 @@ onMounted(async () => {
       @confirm="toggleActive"
     />
 
-    <!-- Toggle Call Start Confirmation -->
     <ConfirmDialog
       v-model:open="showToggleCallStartConfirm"
       :title="t('calling.toggleCallStartConfirmTitle')"
