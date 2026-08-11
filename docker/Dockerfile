@@ -92,8 +92,11 @@ RUN chmod 0755 /usr/local/bin/piper /usr/local/bin/piper-real /usr/local/lib/wha
 # Install default voice model
 COPY --from=piper-dl /tmp/piper-models /opt/piper/models
 
-# Create directories
+# Create directories. TTS settings plus encrypted Gemini/Google Cloud provider
+# credentials are forced onto /app/audio because that directory is persistent
+# in the production compose/Dokploy deployment, unlike /opt/piper/models.
 RUN mkdir -p /app/uploads /app/audio
+ENV WHATOMATE_TTS__SETTINGS_PATH=/app/audio/.whatomate-tts-settings.json
 
 # Expose port
 EXPOSE 8080
