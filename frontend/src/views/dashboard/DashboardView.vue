@@ -65,8 +65,7 @@ import {
   Zap,
   Shield,
   LineChart,
-  Tags,
-  Phone
+  Tags
 } from 'lucide-vue-next'
 // Centralized Chart.js setup (registered once)
 import { Line, Bar, Pie } from '@/lib/charts'
@@ -751,35 +750,6 @@ onMounted(() => {
     <!-- Content -->
     <ScrollArea class="flex-1">
       <div class="p-6 space-y-6">
-        <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <img src="/nexus.svg" alt="Nexus One" class="h-8 w-8" />
-            <h2 class="text-2xl font-bold text-gray-950">Quick Start</h2>
-          </div>
-          <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <RouterLink to="/chat" class="group min-h-48 rounded-[28px] bg-[#0738f9] p-6 text-white transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-              <MessageSquare class="h-7 w-7" />
-              <div class="mt-12 text-2xl font-medium">Chats</div>
-              <p class="mt-2 text-white/80">Open live conversations</p>
-            </RouterLink>
-            <RouterLink to="/settings/contacts" class="group min-h-48 rounded-[28px] bg-[#ffc9f5] p-6 text-gray-950 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-              <Contact class="h-7 w-7" />
-              <div class="mt-12 text-2xl font-medium">Contacts</div>
-              <p class="mt-2 text-gray-700">Create and manage people</p>
-            </RouterLink>
-            <RouterLink to="/chatbot/flows" class="group min-h-48 rounded-[28px] bg-[#d6f5ff] p-6 text-gray-950 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-              <Workflow class="h-7 w-7" />
-              <div class="mt-12 text-2xl font-medium">Flow Builder</div>
-              <p class="mt-2 text-gray-700">Build visual automations</p>
-            </RouterLink>
-            <RouterLink to="/calling/ivr-flows" class="group min-h-48 rounded-[28px] bg-[#ffdf75] p-6 text-gray-950 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-              <Phone class="h-7 w-7" />
-              <div class="mt-12 text-2xl font-medium">IVR Builder</div>
-              <p class="mt-2 text-gray-700">Design live call routing</p>
-            </RouterLink>
-          </div>
-        </section>
-
         <!-- Loading Skeleton -->
         <div v-if="isLoading" class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div v-for="i in 4" :key="i" class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">
@@ -1093,16 +1063,21 @@ onMounted(() => {
 
               <div class="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
                 <div :class="['grid gap-3 pt-1', item.w >= 8 ? 'grid-cols-3' : 'grid-cols-2']">
-                  <template v-for="key in (getWidgetById(item.i)!.config?.shortcuts || [])" :key="key">
+                  <template v-for="(key, shortcutIndex) in (getWidgetById(item.i)!.config?.shortcuts || [])" :key="key">
                     <RouterLink
                       v-if="SHORTCUT_REGISTRY[key as keyof typeof SHORTCUT_REGISTRY]"
                       :to="SHORTCUT_REGISTRY[key as keyof typeof SHORTCUT_REGISTRY].to"
-                      class="card-interactive flex flex-col items-center justify-center p-4 rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-gray-50 light:border-gray-200"
+                      :class="[
+                        'card-interactive flex min-h-36 flex-col items-start justify-end p-5 rounded-[24px] border-0',
+                        shortcutIndex % 4 === 0 ? 'bg-[#0738f9] text-white' :
+                        shortcutIndex % 4 === 1 ? 'bg-[#ffc9f5] text-gray-950' :
+                        shortcutIndex % 4 === 2 ? 'bg-[#d6f5ff] text-gray-950' : 'bg-[#ffdf75] text-gray-950'
+                      ]"
                     >
-                      <div :class="['h-12 w-12 rounded-lg bg-gradient-to-br flex items-center justify-center mb-2 shadow-lg', SHORTCUT_REGISTRY[key as keyof typeof SHORTCUT_REGISTRY].gradient, 'shadow-' + (key as string) + '-500/20']">
-                        <component :is="SHORTCUT_REGISTRY[key as keyof typeof SHORTCUT_REGISTRY].icon" class="h-6 w-6 text-white" />
+                      <div class="mb-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
+                        <component :is="SHORTCUT_REGISTRY[key as keyof typeof SHORTCUT_REGISTRY].icon" class="h-5 w-5" />
                       </div>
-                      <span class="text-sm font-medium text-white light:text-gray-900">{{ SHORTCUT_REGISTRY[key as keyof typeof SHORTCUT_REGISTRY].label }}</span>
+                      <span class="text-lg font-medium">{{ SHORTCUT_REGISTRY[key as keyof typeof SHORTCUT_REGISTRY].label }}</span>
                     </RouterLink>
                   </template>
                 </div>
