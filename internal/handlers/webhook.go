@@ -16,6 +16,7 @@ import (
 	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // WebhookVerify handles Meta's webhook verification challenge
@@ -763,13 +764,17 @@ func (a *App) processContactSync(phoneNumberID, contactPhone, contactName, actio
 			})
 		}
 	case "remove":
-		// Try to find the contact first using the FindContact helper
 		contact, err := contactutil.FindContact(a.DB, account.OrganizationID, contactPhone)
 		if err == nil {
-			if err := a.DB.Delete(contact).Error; err != nil {
+			if err := a.DB.Transaction(func(tx *gorm.DB) error {
+				if _, cleanupErr := hardDeleteConversationData(tx, account.OrganizationID, contact.ID, true); cleanupErr != nil {
+					return cleanupErr
+				}
+				return tx.Unscoped().Where("id = ? AND organization_id = ?", contact.ID, account.OrganizationID).Delete(&models.Contact{}).Error
+			}); err != nil {
 				a.Log.Error("Failed to delete contact on sync remove", "contact_id", contact.ID, "error", err)
 			} else {
-				a.Log.Info("Soft-deleted synced contact (remove) from mobile app", "contact_id", contact.ID, "phone", contactPhone)
+				a.Log.Info("Permanently deleted synced contact (remove) from mobile app", "contact_id", contact.ID, "phone", contactPhone)
 			}
 		} else {
 			a.Log.Info("Contact not found for sync remove", "phone", contactPhone)

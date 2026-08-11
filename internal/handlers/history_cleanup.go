@@ -4,6 +4,7 @@ import (
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // ClearCallHistory soft-deletes only terminal call log records visible to the
@@ -43,10 +44,9 @@ func (a *App) ClearCallHistory(r *fastglue.Request) error {
 	})
 }
 
-// DeleteConversation clears the message history for one contact without
-// deleting the contact or any policy/calling state attached to it. In
-// particular LastInboundAt is deliberately retained because WhatsApp's 24-hour
-// customer-service window must remain accurate after a user clears a chat.
+// DeleteConversation permanently removes the conversation and resets the
+// contact to a clean state. Contact identity, tags, metadata, call permissions,
+// and call history remain because they are not part of the chat conversation.
 func (a *App) DeleteConversation(r *fastglue.Request) error {
 	orgID, _, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
 	if err != nil {
@@ -63,33 +63,35 @@ func (a *App) DeleteConversation(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
-	// Messages embed BaseModel, so this is a soft delete. Reply/reaction foreign
-	// keys and audit/history references therefore remain structurally valid.
-	res := a.DB.Where("organization_id = ? AND contact_id = ?", orgID, contactID).
-		Delete(&models.Message{})
-	if res.Error != nil {
-		a.Log.Error("Failed to delete conversation", "error", res.Error, "org_id", orgID, "contact_id", contactID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete conversation", nil, "")
-	}
-
-	// Reset only the conversation-list presentation fields. Do not clear
-	// LastInboundAt, assignment, tags, metadata, call permissions, notes, or
-	// call history.
-	if err := a.DB.Model(&models.Contact{}).
-		Where("id = ? AND organization_id = ?", contactID, orgID).
-		Updates(map[string]any{
-			"last_message_at":      nil,
-			"last_message_preview": "",
-			"is_read":              true,
-		}).Error; err != nil {
-		a.Log.Error("Failed to reset conversation summary", "error", err, "contact_id", contactID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Conversation messages were cleared but the summary could not be reset", nil, "")
+	var counts conversationDeleteCounts
+	if err := a.DB.Transaction(func(tx *gorm.DB) error {
+		var deleteErr error
+		counts, deleteErr = hardDeleteConversationData(tx, orgID, contactID, false)
+		if deleteErr != nil {
+			return deleteErr
+		}
+		return tx.Model(&models.Contact{}).
+			Where("id = ? AND organization_id = ?", contactID, orgID).
+			Updates(map[string]any{
+				"last_message_at":         nil,
+				"last_message_preview":    "",
+				"last_inbound_at":         nil,
+				"is_read":                 true,
+				"assigned_user_id":        nil,
+				"chatbot_last_message_at": nil,
+				"chatbot_reminder_sent":   false,
+			}).Error
+	}); err != nil {
+		a.Log.Error("Failed to permanently delete conversation", "error", err, "org_id", orgID, "contact_id", contactID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to permanently delete conversation", nil, "")
 	}
 
 	return r.SendEnvelope(map[string]any{
-		"status":          "deleted",
-		"deleted_messages": res.RowsAffected,
-		"contact_id":      contactID.String(),
-		"last_inbound_at": contact.LastInboundAt,
+		"status":                   "permanently_deleted",
+		"deleted_messages":         counts.Messages,
+		"deleted_notes":            counts.Notes,
+		"deleted_chatbot_sessions": counts.ChatbotSessions,
+		"deleted_agent_transfers":  counts.AgentTransfers,
+		"contact_id":               contactID.String(),
 	})
 }

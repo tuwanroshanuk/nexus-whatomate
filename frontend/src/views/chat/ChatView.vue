@@ -234,15 +234,15 @@ function openTemplatePicker() {
 async function clearCurrentConversation() {
   const contact = contactsStore.currentContact
   if (!contact) return
-  if (!window.confirm(`Clear the conversation with ${contact.profile_name || contact.phone_number}? The contact, call permissions, notes, tags, assignments and call history will be kept.`)) return
+  if (!window.confirm(`Permanently delete the conversation with ${contact.profile_name || contact.phone_number}? All messages, notes and conversation state will be removed. The contact and call history will remain. This cannot be undone.`)) return
   try {
     await contactsService.clearConversation(contact.id)
     contactsStore.clearMessages()
     contact.last_message_at = undefined
     await contactsStore.fetchContacts()
-    toast.success('Conversation cleared')
+    toast.success('Conversation permanently deleted')
   } catch (err: any) {
-    toast.error('Unable to clear conversation', { description: err.response?.data?.error?.message || err.message || '' })
+    toast.error('Unable to delete conversation', { description: err.response?.data?.error?.message || err.message || '' })
   }
 }
 
@@ -2007,7 +2007,7 @@ async function sendMediaMessage() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem class="text-red-500 focus:text-red-500" @click="clearCurrentConversation">
                   <Trash2 class="mr-2 h-4 w-4" />
-                  <span>Clear conversation</span>
+                  <span>Delete conversation permanently</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem v-if="canAssignContacts" @click="isAssignDialogOpen = true">

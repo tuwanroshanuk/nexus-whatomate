@@ -1509,7 +1509,7 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 	return r.SendEnvelope(a.buildContactResponse(contact, orgID))
 }
 
-// DeleteContact soft-deletes a contact
+// DeleteContact permanently removes a contact and all contact-owned history.
 func (a *App) DeleteContact(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
@@ -1532,9 +1532,16 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Soft delete the contact
-	if err := a.DB.Delete(contact).Error; err != nil {
-		a.Log.Error("Failed to delete contact", "error", err)
+	var counts conversationDeleteCounts
+	if err := a.DB.Transaction(func(tx *gorm.DB) error {
+		var cleanupErr error
+		counts, cleanupErr = hardDeleteConversationData(tx, orgID, contactID, true)
+		if cleanupErr != nil {
+			return cleanupErr
+		}
+		return tx.Unscoped().Where("id = ? AND organization_id = ?", contactID, orgID).Delete(&models.Contact{}).Error
+	}); err != nil {
+		a.Log.Error("Failed to permanently delete contact", "error", err, "contact_id", contactID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete contact", nil, "")
 	}
 
@@ -1542,7 +1549,15 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 		"contact", contactID, models.AuditActionDeleted, contact, nil)
 
 	return r.SendEnvelope(map[string]any{
-		"message": "Contact deleted successfully",
+		"message":                  "Contact permanently deleted",
+		"status":                   "permanently_deleted",
+		"deleted_messages":         counts.Messages,
+		"deleted_notes":            counts.Notes,
+		"deleted_chatbot_sessions": counts.ChatbotSessions,
+		"deleted_agent_transfers":  counts.AgentTransfers,
+		"deleted_call_logs":        counts.CallLogs,
+		"deleted_call_transfers":   counts.CallTransfers,
+		"deleted_call_permissions": counts.CallPermissions,
 	})
 }
 

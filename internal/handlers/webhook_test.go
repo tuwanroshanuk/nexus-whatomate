@@ -694,14 +694,9 @@ func TestWebhookHandler_smb_app_state_sync(t *testing.T) {
 
 	require.NoError(t, app.WebhookHandler(reqRemove))
 
-	// Verify contact was soft-deleted (remove)
-	var checkUnscoped models.Contact
+	// Contact removals are permanent, including unscoped queries.
 	assert.Eventually(t, func() bool {
-		return app.DB.Unscoped().Where("organization_id = ? AND phone_number = ? AND deleted_at IS NOT NULL", org.ID, "9199997777").First(&checkUnscoped).Error == nil
+		var deleted models.Contact
+		return app.DB.Unscoped().Where("organization_id = ? AND phone_number = ?", org.ID, "9199997777").First(&deleted).Error != nil
 	}, 2*time.Second, 10*time.Millisecond)
-
-	var checkDeleted models.Contact
-	err := app.DB.Where("organization_id = ? AND phone_number = ?", org.ID, "9199997777").First(&checkDeleted).Error
-	assert.Error(t, err, "contact should have been soft-deleted and not found by standard query")
-	assert.True(t, checkUnscoped.DeletedAt.Valid, "DeletedAt should be populated")
 }
