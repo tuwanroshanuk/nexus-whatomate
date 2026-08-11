@@ -16,7 +16,7 @@
     --popover-foreground: 0 0% 98%;
 
     /* Emerald green primary (WhatsApp style) */
-    --primary: 335 79% 42%;
+    --primary: 230 96% 50%;
     --primary-foreground: 0 0% 100%;
 
     /* Subtle secondary/muted for glass effect */
@@ -33,7 +33,7 @@
     /* Subtle borders - key for Linear look */
     --border: 0 0% 12%;
     --input: 0 0% 12%;
-    --ring: 335 79% 42%;
+    --ring: 230 96% 50%;
     --radius: 0.75rem;
 
     /* Glass effect utilities */
@@ -50,7 +50,7 @@
     --card-foreground: 0 0% 9%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 9%;
-    --primary: 335 79% 42%;
+    --primary: 230 96% 50%;
     --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 96%;
     --secondary-foreground: 0 0% 9%;
@@ -62,7 +62,7 @@
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 335 79% 42%;
+    --ring: 230 96% 50%;
 
     /* Glass effect utilities for light mode */
     --glass-bg: rgba(0, 0, 0, 0.02);
@@ -78,7 +78,7 @@
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 7%;
     --popover-foreground: 0 0% 98%;
-    --primary: 335 79% 42%;
+    --primary: 230 96% 50%;
     --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 8%;
     --secondary-foreground: 0 0% 90%;
@@ -90,7 +90,7 @@
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 12%;
     --input: 0 0% 12%;
-    --ring: 335 79% 42%;
+    --ring: 230 96% 50%;
 
     /* Glass effect utilities */
     --glass-bg: rgba(255, 255, 255, 0.03);

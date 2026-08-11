@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'vue-sonner'
-import { MessageSquare, Loader2 } from 'lucide-vue-next'
+import { Loader2 } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
@@ -92,24 +92,21 @@ const initiateSSO = (provider: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-[#0a0a0b] light:bg-gradient-to-br light:from-gray-50 light:to-gray-100 p-4">
-    <div class="w-full max-w-md rounded-2xl border border-white/[0.08] bg-white/[0.02] backdrop-blur light:bg-white light:border-gray-200 light:shadow-xl">
-      <div class="p-8 space-y-1 text-center">
+  <div class="min-h-screen flex items-center justify-center bg-white p-6">
+    <div class="w-full max-w-xl">
+      <div class="p-8 space-y-2 text-center">
         <div class="flex justify-center mb-4">
-          <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center shadow-lg shadow-pink-500/20">
-            <MessageSquare class="h-7 w-7 text-white" />
-          </div>
+          <img src="/nexus.svg" alt="Nexus One" class="h-12 w-12" />
         </div>
-        <h2 class="text-2xl font-bold text-white light:text-gray-900">{{ $t('auth.welcomeTitle') }}</h2>
-        <p class="text-white/50 light:text-gray-500">
-          {{ $t('auth.welcomeSubtitle') }}
-        </p>
+        <h2 class="text-3xl font-medium tracking-tight text-gray-950">Sign In To Nexus One</h2>
+        <p class="text-lg text-gray-900">Innovate, Design, and Craft with Nexus</p>
+        <p class="mx-auto max-w-lg text-base leading-7 text-gray-700">Pioneering creative solutions through cutting-edge technology and innovative design thinking.</p>
       </div>
 
       <form @submit.prevent="handleLogin">
-        <div class="px-8 pb-4 space-y-4">
+        <div class="px-8 pt-6 pb-4 space-y-5">
           <div class="space-y-2">
-            <Label for="email" class="text-white/70 light:text-gray-700">{{ $t('common.email') }}</Label>
+            <Label for="email" class="sr-only">{{ $t('common.email') }}</Label>
             <Input
               id="email"
               v-model="email"
@@ -117,10 +114,11 @@ const initiateSSO = (provider: string) => {
               :placeholder="$t('auth.emailPlaceholder')"
               :disabled="isLoading"
               autocomplete="email"
+              class="h-12 border-x-0 border-t-0 rounded-none px-1 text-base focus-visible:ring-0 focus-visible:border-[#0738f9]"
             />
           </div>
           <div class="space-y-2">
-            <Label for="password" class="text-white/70 light:text-gray-700">{{ $t('auth.password') }}</Label>
+            <Label for="password" class="sr-only">{{ $t('auth.password') }}</Label>
             <Input
               id="password"
               v-model="password"
@@ -128,9 +126,10 @@ const initiateSSO = (provider: string) => {
               :placeholder="$t('auth.passwordPlaceholder')"
               :disabled="isLoading"
               autocomplete="current-password"
+              class="h-12 border-x-0 border-t-0 rounded-none px-1 text-base focus-visible:ring-0 focus-visible:border-[#0738f9]"
             />
           </div>
-          <Button type="submit" class="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white shadow-lg shadow-pink-500/20" :disabled="isLoading">
+          <Button type="submit" class="mx-auto flex h-12 w-48 rounded-md bg-[#0738f9] text-white hover:bg-[#062ed1]" :disabled="isLoading">
             <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
             {{ $t('auth.signIn') }}
           </Button>
@@ -141,7 +140,7 @@ const initiateSSO = (provider: string) => {
       <div v-if="ssoProviders.length > 0" class="px-8 pb-4 space-y-3">
         <div class="relative my-2">
           <Separator class="bg-white/[0.08] light:bg-gray-200" />
-          <span class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#0a0a0b] light:bg-white px-2 text-xs text-white/40 light:text-gray-500">
+          <span class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-gray-500">
             {{ $t('auth.orContinueWith') }}
           </span>
         </div>
@@ -150,7 +149,7 @@ const initiateSSO = (provider: string) => {
           v-for="provider in ssoProviders"
           :key="provider.provider"
           variant="outline"
-          class="w-full justify-start gap-3 transition-colors bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50"
+          class="w-full justify-start gap-3 border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
           :class="providerColors[provider.provider] || providerColors.custom"
           @click="initiateSSO(provider.provider)"
         >
@@ -162,9 +161,9 @@ const initiateSSO = (provider: string) => {
       </div>
 
       <div class="px-8 pb-8">
-        <p class="text-sm text-center text-white/40 light:text-gray-500">
+        <p class="text-sm text-center text-gray-500">
           {{ $t('auth.noAccount') }}
-          <RouterLink to="/register" class="text-pink-400 light:text-pink-600 hover:underline">
+          <RouterLink to="/register" class="text-[#0738f9] hover:underline">
             {{ $t('auth.signUp') }}
           </RouterLink>
         </p>

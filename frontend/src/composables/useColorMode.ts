@@ -2,8 +2,8 @@ import { ref, watch, onMounted } from 'vue'
 
 export type ColorMode = 'light' | 'dark' | 'system'
 
-const colorMode = ref<ColorMode>('dark')
-const isDark = ref(true)
+const colorMode = ref<ColorMode>('light')
+const isDark = ref(false)
 
 function getSystemTheme(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches

@@ -89,7 +89,12 @@ import {
   RotateCw,
   Filter,
   StickyNote,
-  Trash2
+  Trash2,
+  Bold,
+  Italic,
+  Strikethrough,
+  Maximize2,
+  Minimize2
 } from 'lucide-vue-next'
 import { getInitials, getAvatarGradient } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
@@ -121,6 +126,7 @@ const { isDark } = useColorMode()
 const canWriteContacts = authStore.hasPermission('contacts', 'write')
 
 const messageInput = ref('')
+const composerExpanded = ref(false)
 const messagesEndRef = ref<HTMLElement | null>(null)
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
 const isSending = ref(false)
@@ -791,6 +797,20 @@ function resetTextareaHeight() {
   const textarea = messageInputRef.value
   if (!textarea) return
   textarea.style.height = 'auto'
+}
+
+function formatSelection(before: string, after = before) {
+  const textarea = messageInputRef.value
+  if (!textarea) return
+  const start = textarea.selectionStart ?? messageInput.value.length
+  const end = textarea.selectionEnd ?? start
+  const selected = messageInput.value.slice(start, end)
+  messageInput.value = `${messageInput.value.slice(0, start)}${before}${selected}${after}${messageInput.value.slice(end)}`
+  nextTick(() => {
+    textarea.focus()
+    textarea.setSelectionRange(start + before.length, start + before.length + selected.length)
+    autoResizeTextarea()
+  })
 }
 
 function getReplyPreviewContent(message: Message): string {
@@ -2497,8 +2517,23 @@ async function sendMediaMessage() {
         </div>
 
         <!-- Message Input -->
-        <div class="p-4 border-t border-white/[0.08] light:border-gray-200 bg-[#0f0f10] light:bg-white">
-          <form @submit.prevent="sendMessage" class="flex items-center gap-2 p-2 rounded-xl bg-white/[0.06] light:bg-gray-100 border border-white/[0.08] light:border-gray-200">
+        <div :class="composerExpanded ? 'fixed inset-0 z-[80] bg-white p-6 flex flex-col' : 'p-4 border-t border-gray-200 bg-[#fffdf8]'">
+          <div v-if="composerExpanded" class="mb-4 flex items-center justify-between border-b border-gray-200 pb-4">
+            <div>
+              <h2 class="text-xl font-semibold text-gray-950">Compose Message</h2>
+              <p class="text-sm text-gray-500">{{ contactsStore.currentContact?.profile_name || contactsStore.currentContact?.name || contactsStore.currentContact?.phone_number }}</p>
+            </div>
+            <Button type="button" variant="ghost" size="icon" @click="composerExpanded = false"><X class="h-5 w-5" /></Button>
+          </div>
+          <form @submit.prevent="sendMessage" :class="['flex items-center gap-2 p-2 rounded-xl bg-white border border-gray-200 shadow-sm', composerExpanded && 'flex-1 items-start']">
+            <button type="button" class="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center transition-colors" :title="composerExpanded ? 'Exit full screen' : 'Full screen composer'" @click="composerExpanded = !composerExpanded">
+              <Minimize2 v-if="composerExpanded" class="h-[18px] w-[18px] text-gray-600" />
+              <Maximize2 v-else class="h-[18px] w-[18px] text-gray-600" />
+            </button>
+            <button type="button" class="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center" title="Bold selected text" @click="formatSelection('*')"><Bold class="h-[18px] w-[18px] text-gray-700" /></button>
+            <button type="button" class="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center" title="Italic selected text" @click="formatSelection('_')"><Italic class="h-[18px] w-[18px] text-gray-700" /></button>
+            <button type="button" class="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center" title="Strikethrough selected text" @click="formatSelection('~')"><Strikethrough class="h-[18px] w-[18px] text-gray-700" /></button>
+            <button type="button" class="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center" title="Monospace selected text" @click="formatSelection('```')"><Code class="h-[18px] w-[18px] text-gray-700" /></button>
             <Tooltip>
               <TooltipTrigger as-child>
                 <span>
@@ -2565,11 +2600,11 @@ async function sendMediaMessage() {
               v-model="messageInput"
               :placeholder="$t('chat.typeMessage') + '...'"
               rows="1"
-              class="flex-1 bg-transparent text-[14px] text-white light:text-gray-900 placeholder:text-white/30 light:placeholder:text-gray-400 focus:outline-none resize-none min-h-[36px] max-h-[120px] py-2 overflow-y-auto"
+              :class="['flex-1 bg-transparent text-[14px] text-gray-900 placeholder:text-gray-400 focus:outline-none resize-none min-h-[36px] py-2 overflow-y-auto', composerExpanded ? 'h-full max-h-none text-base' : 'max-h-[120px]']"
               @keydown.enter.exact.prevent="sendMessage"
               @input="autoResizeTextarea"
             />
-            <button type="submit" class="w-9 h-9 rounded-lg bg-pink-600 hover:bg-pink-500 light:bg-pink-500 light:hover:bg-pink-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="!messageInput.trim() || isSending">
+            <button type="submit" class="w-9 h-9 rounded-lg bg-[#0738f9] hover:bg-[#062ed1] flex items-center justify-center transition-colors disabled:opacity-50" :disabled="!messageInput.trim() || isSending">
               <Send class="w-4 h-4 text-white" />
             </button>
           </form>

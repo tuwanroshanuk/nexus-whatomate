@@ -65,7 +65,8 @@ import {
   Zap,
   Shield,
   LineChart,
-  Tags
+  Tags,
+  Phone
 } from 'lucide-vue-next'
 // Centralized Chart.js setup (registered once)
 import { Line, Bar, Pie } from '@/lib/charts'
@@ -750,6 +751,35 @@ onMounted(() => {
     <!-- Content -->
     <ScrollArea class="flex-1">
       <div class="p-6 space-y-6">
+        <section class="space-y-4">
+          <div class="flex items-center gap-3">
+            <img src="/nexus.svg" alt="Nexus One" class="h-8 w-8" />
+            <h2 class="text-2xl font-bold text-gray-950">Quick Start</h2>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <RouterLink to="/chat" class="group min-h-48 rounded-[28px] bg-[#0738f9] p-6 text-white transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+              <MessageSquare class="h-7 w-7" />
+              <div class="mt-12 text-2xl font-medium">Chats</div>
+              <p class="mt-2 text-white/80">Open live conversations</p>
+            </RouterLink>
+            <RouterLink to="/settings/contacts" class="group min-h-48 rounded-[28px] bg-[#ffc9f5] p-6 text-gray-950 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+              <Contact class="h-7 w-7" />
+              <div class="mt-12 text-2xl font-medium">Contacts</div>
+              <p class="mt-2 text-gray-700">Create and manage people</p>
+            </RouterLink>
+            <RouterLink to="/chatbot/flows" class="group min-h-48 rounded-[28px] bg-[#d6f5ff] p-6 text-gray-950 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+              <Workflow class="h-7 w-7" />
+              <div class="mt-12 text-2xl font-medium">Flow Builder</div>
+              <p class="mt-2 text-gray-700">Build visual automations</p>
+            </RouterLink>
+            <RouterLink to="/calling/ivr-flows" class="group min-h-48 rounded-[28px] bg-[#ffdf75] p-6 text-gray-950 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+              <Phone class="h-7 w-7" />
+              <div class="mt-12 text-2xl font-medium">IVR Builder</div>
+              <p class="mt-2 text-gray-700">Design live call routing</p>
+            </RouterLink>
+          </div>
+        </section>
+
         <!-- Loading Skeleton -->
         <div v-if="isLoading" class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div v-for="i in 4" :key="i" class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">
