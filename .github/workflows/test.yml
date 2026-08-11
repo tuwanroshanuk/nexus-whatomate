@@ -61,16 +61,6 @@ jobs:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/whatomate_test?sslmode=disable
           TEST_REDIS_URL: redis://localhost:6379
         run: |
-          # gotestsum gives live "Running N/M tests" output, names failed
-          # tests prominently at the end, and re-prints failure logs in a
-          # final summary so we don't have to scroll.
-          # -p 1 runs packages sequentially to avoid database conflicts
-          # (all packages share the test DB).
-          # --format testname streams a PASS/FAIL line per test as it
-          # completes, so a hanging test is easy to spot — the last
-          # printed test is the one before the hang.
-          # -timeout 10m caps the whole run so a hung test fails the job
-          # in a reasonable window instead of waiting for go's default.
           gotestsum \
             --format testname \
             --hide-summary=skipped \
@@ -117,3 +107,25 @@ jobs:
 
       - name: Build
         run: go build -v ./...
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
