@@ -241,10 +241,11 @@ func (s *mobilePushService) sendBroadcast(msg BroadcastMessage) {
 	}
 	priority := "normal"
 	ttl := "120s"
-	if msg.Message.Type == TypeCallTransferWaiting {
+	switch msg.Message.Type {
+	case TypeCallTransferWaiting:
 		priority = "high"
 		ttl = "45s"
-	} else if msg.Message.Type == TypeNewMessage {
+	case TypeNewMessage:
 		priority = "high"
 		ttl = "86400s"
 	}
@@ -315,7 +316,9 @@ func (s *mobilePushService) sendToDevice(device MobileDevice, event, payload, pr
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
