@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/zerodha/logf"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -197,7 +198,8 @@ func mirrorMobilePush(msg BroadcastMessage, log logf.Logger) {
 
 func shouldMirrorToMobile(messageType string) bool {
 	switch messageType {
-	case TypeCallTransferWaiting,
+	case TypeNewMessage,
+		TypeCallTransferWaiting,
 		TypeCallTransferConnected,
 		TypeCallTransferCompleted,
 		TypeCallTransferAbandoned,
@@ -211,9 +213,18 @@ func shouldMirrorToMobile(messageType string) bool {
 }
 
 func (s *mobilePushService) sendBroadcast(msg BroadcastMessage) {
+	targetUserID := msg.UserID
+	if msg.Message.Type == TypeNewMessage {
+		var ok bool
+		targetUserID, ok = mobileMessageRecipient(msg.Message.Payload)
+		if !ok || !s.messageAlertsEnabled(targetUserID) {
+			return
+		}
+	}
+
 	query := s.db.Where("organization_id = ?", msg.OrgID)
-	if msg.UserID != uuid.Nil {
-		query = query.Where("user_id = ?", msg.UserID)
+	if targetUserID != uuid.Nil {
+		query = query.Where("user_id = ?", targetUserID)
 	}
 	var devices []MobileDevice
 	if err := query.Find(&devices).Error; err != nil {
@@ -233,13 +244,47 @@ func (s *mobilePushService) sendBroadcast(msg BroadcastMessage) {
 	if msg.Message.Type == TypeCallTransferWaiting {
 		priority = "high"
 		ttl = "45s"
+	} else if msg.Message.Type == TypeNewMessage {
+		priority = "high"
+		ttl = "86400s"
 	}
 
 	for _, device := range devices {
 		if err := s.sendToDevice(device, msg.Message.Type, string(payloadJSON), priority, ttl); err != nil {
-			s.log.Warn("Failed to send mobile call push", "error", err, "device_id", device.ID, "event", msg.Message.Type)
+			s.log.Warn("Failed to send mobile push", "error", err, "device_id", device.ID, "event", msg.Message.Type)
 		}
 	}
+}
+
+// mobileMessageRecipient applies the same routing rules as the web client:
+// only an incoming customer message assigned to a specific agent should alert
+// that agent. Outgoing messages and unassigned inbox traffic still arrive over
+// WebSocket, but do not create noisy organization-wide phone notifications.
+func mobileMessageRecipient(raw any) (uuid.UUID, bool) {
+	payload, ok := raw.(map[string]any)
+	if !ok || strings.ToLower(strings.TrimSpace(fmt.Sprint(payload["direction"]))) != "incoming" {
+		return uuid.Nil, false
+	}
+	assigned, err := uuid.Parse(strings.TrimSpace(fmt.Sprint(payload["assigned_user_id"])))
+	if err != nil || assigned == uuid.Nil {
+		return uuid.Nil, false
+	}
+	return assigned, true
+}
+
+func (s *mobilePushService) messageAlertsEnabled(userID uuid.UUID) bool {
+	var user models.User
+	if err := s.db.Select("id", "settings", "is_active").
+		Where("id = ?", userID).
+		First(&user).Error; err != nil || !user.IsActive {
+		return false
+	}
+	enabled, exists := user.Settings["new_message_alerts"]
+	if !exists {
+		return true
+	}
+	value, ok := enabled.(bool)
+	return !ok || value
 }
 
 func (s *mobilePushService) sendToDevice(device MobileDevice, event, payload, priority, ttl string) error {

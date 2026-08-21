@@ -129,9 +129,9 @@ func (h *Hub) broadcastMessage(msg BroadcastMessage) {
 	}
 }
 
-// Broadcast sends a message to WebSocket clients and mirrors call-routing
-// lifecycle events to registered native devices. FCM delivery is asynchronous
-// and never blocks/drops the realtime WebSocket path.
+// Broadcast sends a message to WebSocket clients and mirrors eligible call and
+// assigned-message events to registered native devices. FCM delivery is
+// asynchronous and never blocks/drops the realtime WebSocket path.
 func (h *Hub) Broadcast(msg BroadcastMessage) {
 	mirrorMobilePush(msg, h.log)
 	select {
