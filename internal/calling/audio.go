@@ -44,6 +44,19 @@ func (r *mediaRuntime) prewarmDir(dir string) {
 	})
 }
 
+// InvalidateHotMedia drops a process-cached audio file so the next play reads
+// the current bytes from disk. Required after hold/ringback uploads that
+// overwrite or replace an existing path.
+func InvalidateHotMedia(filePath string) {
+	if strings.TrimSpace(filePath) == "" {
+		return
+	}
+	clean := filepath.Clean(filePath)
+	hotMedia.mu.Lock()
+	delete(hotMedia.cache, clean)
+	hotMedia.mu.Unlock()
+}
+
 func (r *mediaRuntime) packets(filePath string) ([][]byte, error) {
 	clean := filepath.Clean(filePath)
 	r.mu.RLock()

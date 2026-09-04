@@ -9,6 +9,8 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/crypto"
@@ -52,6 +54,9 @@ type AccountResponse struct {
 	HasAppSecret           bool       `json:"has_app_secret"`
 	PhoneNumber            string     `json:"phone_number,omitempty"`
 	DisplayName            string     `json:"display_name,omitempty"`
+	ProfilePictureURL      string     `json:"profile_picture_url,omitempty"`
+	About                  string     `json:"about,omitempty"`
+	QualityRating          string     `json:"quality_rating,omitempty"`
 	CreatedByID            *uuid.UUID `json:"created_by_id,omitempty"`
 	CreatedByName          string     `json:"created_by_name,omitempty"`
 	UpdatedByID            *uuid.UUID `json:"updated_by_id,omitempty"`
@@ -78,10 +83,97 @@ func (a *App) ListAccounts(r *fastglue.Request) error {
 	for i, acc := range accounts {
 		response[i] = accountToResponse(acc)
 	}
+	a.enrichAccountResponses(accounts, response)
 
 	return r.SendEnvelope(map[string]any{
 		"accounts": response,
 	})
+}
+
+type accountMetaCache struct {
+	PhoneNumber       string `json:"phone_number"`
+	DisplayName       string `json:"display_name"`
+	ProfilePictureURL string `json:"profile_picture_url"`
+	About             string `json:"about"`
+	QualityRating     string `json:"quality_rating"`
+}
+
+func (a *App) enrichAccountResponses(accounts []models.WhatsAppAccount, responses []AccountResponse) {
+	if a.WhatsApp == nil || len(accounts) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var wg sync.WaitGroup
+	for i := range accounts {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			a.fillAccountMeta(ctx, &accounts[i], &responses[i])
+		}(i)
+	}
+	wg.Wait()
+}
+
+func (a *App) fillAccountMeta(ctx context.Context, acc *models.WhatsAppAccount, resp *AccountResponse) {
+	cacheKey := "account:display:" + acc.ID.String()
+	if a.Redis != nil {
+		if raw, err := a.Redis.Get(ctx, cacheKey).Result(); err == nil && raw != "" {
+			var cached accountMetaCache
+			if json.Unmarshal([]byte(raw), &cached) == nil {
+				applyAccountMeta(resp, cached)
+				return
+			}
+		}
+	}
+
+	copyAcc := *acc
+	a.decryptAccountSecrets(&copyAcc)
+	if copyAcc.AccessToken == "" || copyAcc.PhoneID == "" {
+		return
+	}
+
+	var meta accountMetaCache
+	waAcc := a.toWhatsAppAccount(&copyAcc)
+	if profile, err := a.WhatsApp.GetBusinessProfile(ctx, waAcc); err == nil && profile != nil {
+		meta.ProfilePictureURL = profile.ProfilePicture
+		meta.About = profile.About
+		if profile.Description != "" && meta.About == "" {
+			meta.About = profile.Description
+		}
+	}
+	if info, err := a.WhatsApp.GetPhoneNumberInfo(ctx, copyAcc.PhoneID, copyAcc.AccessToken, copyAcc.APIVersion); err == nil && info != nil {
+		meta.PhoneNumber = info.DisplayPhoneNumber
+		meta.DisplayName = info.VerifiedName
+		meta.QualityRating = info.QualityRating
+	}
+	if meta.PhoneNumber == "" && meta.DisplayName == "" && meta.ProfilePictureURL == "" {
+		return
+	}
+	applyAccountMeta(resp, meta)
+	if a.Redis != nil {
+		if data, err := json.Marshal(meta); err == nil {
+			a.Redis.Set(ctx, cacheKey, string(data), time.Hour)
+		}
+	}
+}
+
+func applyAccountMeta(resp *AccountResponse, meta accountMetaCache) {
+	if meta.PhoneNumber != "" {
+		resp.PhoneNumber = meta.PhoneNumber
+	}
+	if meta.DisplayName != "" {
+		resp.DisplayName = meta.DisplayName
+	}
+	if meta.ProfilePictureURL != "" {
+		resp.ProfilePictureURL = meta.ProfilePictureURL
+	}
+	if meta.About != "" {
+		resp.About = meta.About
+	}
+	if meta.QualityRating != "" {
+		resp.QualityRating = meta.QualityRating
+	}
 }
 
 // CreateAccount creates a new WhatsApp account

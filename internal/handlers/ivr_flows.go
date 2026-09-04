@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shridarpatil/whatomate/internal/calling"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -820,8 +821,11 @@ func (a *App) UploadOrgAudio(r *fastglue.Request) error {
 	}
 	_ = tmpInput.Close()
 
-	// Transcode to OGG/Opus 48kHz mono using ffmpeg
-	filename := fmt.Sprintf("org_%s_%s.ogg", orgID.String(), audioType)
+	originalName := sanitizeUploadedAudioName(fileHeader.Filename)
+
+	// Version the stored name so in-process media cache and UI filenames
+	// actually change when a new clip is uploaded.
+	filename := fmt.Sprintf("org_%s_%s_%d.ogg", orgID.String(), audioType, time.Now().Unix())
 	filePath := filepath.Join(audioDir, filename)
 
 	if err := transcodeToOpus(tmpInput.Name(), filePath); err != nil {
@@ -839,20 +843,47 @@ func (a *App) UploadOrgAudio(r *fastglue.Request) error {
 		org.Settings = models.JSONB{}
 	}
 	settingsKey := audioType + "_file"
+	previous, _ := org.Settings[settingsKey].(string)
 	org.Settings[settingsKey] = filename
+	org.Settings[audioType+"_original_name"] = originalName
 	if err := a.DB.Save(&org).Error; err != nil {
 		a.Log.Error("Failed to update organization audio settings", "error", err, "org_id", orgID, "audio_type", audioType)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update organization settings", nil, "")
 	}
 
-	a.Log.Info("Org audio uploaded", "org_id", orgID, "type", audioType, "filename", filename, "size", len(data))
+	if a.CallManager != nil {
+		a.CallManager.InvalidateOrgCallingSettingsCache(orgID)
+	}
+	calling.InvalidateHotMedia(filePath)
+	if previous != "" && previous != filename {
+		oldPath := filepath.Join(audioDir, previous)
+		calling.InvalidateHotMedia(oldPath)
+		_ = os.Remove(oldPath)
+	}
+
+	a.Log.Info("Org audio uploaded", "org_id", orgID, "type", audioType, "filename", filename, "original", originalName, "size", len(data))
 
 	return r.SendEnvelope(map[string]any{
-		"filename":  filename,
-		"type":      audioType,
-		"mime_type": mimeType,
-		"size":      len(data),
+		"filename":      filename,
+		"original_name": originalName,
+		"type":          audioType,
+		"mime_type":     mimeType,
+		"size":          len(data),
 	})
+}
+
+func sanitizeUploadedAudioName(name string) string {
+	base := filepath.Base(strings.TrimSpace(name))
+	base = strings.ReplaceAll(base, "\\", "_")
+	base = strings.ReplaceAll(base, "/", "_")
+	if base == "" || base == "." || base == ".." {
+		return "audio"
+	}
+	if len(base) > 120 {
+		ext := filepath.Ext(base)
+		base = base[:120-len(ext)] + ext
+	}
+	return base
 }
 
 // transcodeToOpus converts any audio file to OGG/Opus 48kHz mono using ffmpeg.

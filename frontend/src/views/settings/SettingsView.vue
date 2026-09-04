@@ -60,7 +60,9 @@ const callingSettings = ref({
   max_call_duration: 300,
   transfer_timeout_secs: 120,
   hold_music_file: '',
-  ringback_file: ''
+  hold_music_original_name: '',
+  ringback_file: '',
+  ringback_original_name: ''
 })
 
 const isUploadingHoldMusic = ref(false)
@@ -270,7 +272,9 @@ onMounted(async () => {
         max_call_duration: orgData.settings?.max_call_duration || 300,
         transfer_timeout_secs: orgData.settings?.transfer_timeout_secs || 120,
         hold_music_file: orgData.settings?.hold_music_file || '',
-        ringback_file: orgData.settings?.ringback_file || ''
+        hold_music_original_name: orgData.settings?.hold_music_original_name || '',
+        ringback_file: orgData.settings?.ringback_file || '',
+        ringback_original_name: orgData.settings?.ringback_original_name || ''
       }
     }
 
@@ -370,8 +374,13 @@ async function uploadAudio(type: 'hold_music' | 'ringback', event: Event) {
   try {
     const response = await organizationService.uploadOrgAudio(file, type)
     const data = response.data.data || response.data
-    if (isHold) callingSettings.value.hold_music_file = data.filename
-    else callingSettings.value.ringback_file = data.filename
+    if (isHold) {
+      callingSettings.value.hold_music_file = data.filename
+      callingSettings.value.hold_music_original_name = data.original_name || data.filename
+    } else {
+      callingSettings.value.ringback_file = data.filename
+      callingSettings.value.ringback_original_name = data.original_name || data.filename
+    }
     toast.success(t('settings.audioUploaded'))
   } catch (error) {
     toast.error(t('settings.audioUploadFailed'))
@@ -738,7 +747,7 @@ function togglePlayAudio(type: 'hold_music' | 'ringback') {
                   </div>
                   <div class="flex items-center gap-3">
                     <span class="text-sm text-white/50 light:text-gray-500">
-                      {{ callingSettings.hold_music_file ? `${$t('settings.currentFile')}: ${callingSettings.hold_music_file}` : $t('settings.noFileUploaded') }}
+                      {{ callingSettings.hold_music_file ? `${$t('settings.currentFile')}: ${callingSettings.hold_music_original_name || callingSettings.hold_music_file}` : $t('settings.noFileUploaded') }}
                     </span>
                     <Button
                       v-if="callingSettings.hold_music_file"
@@ -772,7 +781,7 @@ function togglePlayAudio(type: 'hold_music' | 'ringback') {
                   </div>
                   <div class="flex items-center gap-3">
                     <span class="text-sm text-white/50 light:text-gray-500">
-                      {{ callingSettings.ringback_file ? `${$t('settings.currentFile')}: ${callingSettings.ringback_file}` : $t('settings.noFileUploaded') }}
+                      {{ callingSettings.ringback_file ? `${$t('settings.currentFile')}: ${callingSettings.ringback_original_name || callingSettings.ringback_file}` : $t('settings.noFileUploaded') }}
                     </span>
                     <Button
                       v-if="callingSettings.ringback_file"

@@ -74,6 +74,9 @@ func (a *App) UpdateBusinessProfile(r *fastglue.Request) error {
 		a.Log.Error("Failed to update business profile", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update business profile", nil, "")
 	}
+	if a.Redis != nil {
+		a.Redis.Del(ctx, "account:display:"+account.ID.String())
+	}
 
 	// Re-fetch to ensure we have the latest state
 	profile, err := a.WhatsApp.GetBusinessProfile(ctx, waAccount)

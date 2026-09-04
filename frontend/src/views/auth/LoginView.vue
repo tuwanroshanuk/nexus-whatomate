@@ -92,65 +92,83 @@ const initiateSSO = (provider: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-white p-6">
-    <div class="w-full max-w-xl">
-      <div class="p-8 space-y-2 text-center">
-        <div class="flex justify-center mb-4">
-          <img src="/nexus.svg" alt="Nexus One" class="h-12 w-12" />
-        </div>
-        <h2 class="text-3xl font-medium tracking-tight text-gray-950">Sign In To Nexus One</h2>
-        <p class="text-lg text-gray-900">Innovate, Design, and Craft with Nexus</p>
-        <p class="mx-auto max-w-lg text-base leading-7 text-gray-700">Pioneering creative solutions through cutting-edge technology and innovative design thinking.</p>
+  <div class="min-h-svh flex flex-col items-center justify-center bg-white px-6 py-12 gap-10">
+    <div class="w-full max-w-[500px] rounded-[17px] border border-[#d1d1d1] bg-white px-8 py-10 sm:px-14">
+      <div class="flex justify-center mb-8">
+        <img src="/nexus.svg" alt="Nexus One" class="h-[34px] w-[34px]" />
+      </div>
+      <div class="text-center space-y-2.5">
+        <h1 class="text-2xl font-normal tracking-tight text-[#111111]">Sign In To Nexus One</h1>
+        <p class="text-sm text-[#111111]">Innovate, Design, and Craft with Nexus</p>
+        <p class="text-sm leading-5 text-[#111111]">Pioneering creative solutions through cutting-edge<br class="hidden sm:inline" /> technology and innovative design thinking.</p>
       </div>
 
-      <form @submit.prevent="handleLogin">
-        <div class="px-8 pt-6 pb-4 space-y-5">
-          <div class="space-y-2">
-            <Label for="email" class="sr-only">{{ $t('common.email') }}</Label>
-            <Input
-              id="email"
-              v-model="email"
-              type="email"
-              :placeholder="$t('auth.emailPlaceholder')"
-              :disabled="isLoading"
-              autocomplete="email"
-              class="h-12 border-x-0 border-t-0 rounded-none px-1 text-base focus-visible:ring-0 focus-visible:border-[#0738f9]"
-            />
-          </div>
-          <div class="space-y-2">
-            <Label for="password" class="sr-only">{{ $t('auth.password') }}</Label>
-            <Input
-              id="password"
-              v-model="password"
-              type="password"
-              :placeholder="$t('auth.passwordPlaceholder')"
-              :disabled="isLoading"
-              autocomplete="current-password"
-              class="h-12 border-x-0 border-t-0 rounded-none px-1 text-base focus-visible:ring-0 focus-visible:border-[#0738f9]"
-            />
-          </div>
-          <Button type="submit" class="mx-auto flex h-12 w-48 rounded-md bg-[#0738f9] text-white hover:bg-[#062ed1]" :disabled="isLoading">
-            <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
-            {{ $t('auth.signIn') }}
+      <form class="mt-11 space-y-3.5" @submit.prevent="handleLogin">
+        <div class="relative">
+          <svg class="pointer-events-none absolute left-0 top-2.5 h-4 w-4 stroke-[#747474]" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3 6.75h18v10.5H3zM3.5 7.25 12 13l8.5-5.75" />
+          </svg>
+          <Label for="email" class="sr-only">{{ $t('common.email') }}</Label>
+          <Input
+            id="email"
+            v-model="email"
+            type="email"
+            placeholder="@your email address"
+            :disabled="isLoading"
+            autocomplete="email"
+            class="h-10 rounded-none border-x-0 border-t-0 border-[#d8d8d8] pl-6 pr-1 text-sm shadow-none focus-visible:ring-0 focus-visible:border-[#123dff]"
+          />
+        </div>
+        <div class="relative">
+          <svg class="pointer-events-none absolute left-0 top-2.5 h-4 w-4 stroke-[#747474]" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M6.5 10.5h11v9h-11zM8.5 10.5V7.75a3.5 3.5 0 0 1 7 0v2.75M12 14.25v2" />
+          </svg>
+          <Label for="password" class="sr-only">{{ $t('auth.password') }}</Label>
+          <Input
+            id="password"
+            v-model="password"
+            type="password"
+            placeholder="enter your password"
+            :disabled="isLoading"
+            autocomplete="current-password"
+            class="h-10 rounded-none border-x-0 border-t-0 border-[#d8d8d8] pl-6 pr-1 text-sm shadow-none focus-visible:ring-0 focus-visible:border-[#123dff]"
+          />
+        </div>
+        <div class="pt-6 grid grid-cols-[110px_1fr] items-center gap-4">
+          <Button type="submit" class="h-[35px] rounded-[5px] bg-[#123dff] text-white text-[13px] hover:bg-[#0029dc]" :disabled="isLoading">
+            <Loader2 v-if="isLoading" class="mr-2 h-3.5 w-3.5 animate-spin" />
+            Sign In
+          </Button>
+          <Button
+            v-if="ssoProviders.some((p) => p.provider === 'google')"
+            type="button"
+            variant="ghost"
+            class="justify-center gap-2 text-[13px] text-[#111111]"
+            @click="initiateSSO('google')"
+          >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="currentColor" d="M21.35 12.21c0-.64-.06-1.26-.16-1.85H12v3.5h5.25a4.49 4.49 0 0 1-1.95 2.95v2.27h3.16c1.85-1.7 2.89-4.21 2.89-6.87Z" />
+              <path fill="currentColor" d="M12 21.75c2.64 0 4.86-.88 6.48-2.38l-3.16-2.44c-.88.59-2 .94-3.32.94-2.55 0-4.71-1.72-5.48-4.04H3.26v2.5A9.79 9.79 0 0 0 12 21.75Z" />
+              <path fill="currentColor" d="M6.52 13.83A5.9 5.9 0 0 1 6.21 12c0-.64.11-1.26.31-1.83v-2.5H3.26A9.74 9.74 0 0 0 2.21 12c0 1.56.37 3.04 1.05 4.33l3.26-2.5Z" />
+              <path fill="currentColor" d="M12 6.13c1.44 0 2.73.49 3.75 1.47l2.81-2.81A9.43 9.43 0 0 0 12 2.25a9.79 9.79 0 0 0-8.74 5.42l3.26 2.5C7.29 7.85 9.45 6.13 12 6.13Z" />
+            </svg>
+            Google Login
           </Button>
         </div>
       </form>
 
-      <!-- SSO Section -->
-      <div v-if="ssoProviders.length > 0" class="px-8 pb-4 space-y-3">
+      <div v-if="ssoProviders.filter((p) => p.provider !== 'google').length > 0" class="pt-6 space-y-3">
         <div class="relative my-2">
-          <Separator class="bg-white/[0.08] light:bg-gray-200" />
+          <Separator class="bg-gray-200" />
           <span class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-gray-500">
             {{ $t('auth.orContinueWith') }}
           </span>
         </div>
-
         <Button
-          v-for="provider in ssoProviders"
+          v-for="provider in ssoProviders.filter((p) => p.provider !== 'google')"
           :key="provider.provider"
           variant="outline"
-          class="w-full justify-start gap-3 border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
-          :class="providerColors[provider.provider] || providerColors.custom"
+          class="w-full justify-start gap-3 border-gray-200 bg-white text-gray-700"
           @click="initiateSSO(provider.provider)"
         >
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -160,14 +178,11 @@ const initiateSSO = (provider: string) => {
         </Button>
       </div>
 
-      <div class="px-8 pb-8">
-        <p class="text-sm text-center text-gray-500">
-          {{ $t('auth.noAccount') }}
-          <RouterLink to="/register" class="text-[#0738f9] hover:underline">
-            {{ $t('auth.signUp') }}
-          </RouterLink>
-        </p>
-      </div>
+      <p class="mt-8 text-sm text-center text-gray-500">
+        New to Nexus?
+        <RouterLink to="/register" class="text-[#123dff] hover:underline">Create an account</RouterLink>
+      </p>
     </div>
+    <p class="text-xs text-gray-500">Read Nexus Account Terms And Conditions</p>
   </div>
 </template>

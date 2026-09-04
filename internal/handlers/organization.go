@@ -42,24 +42,28 @@ func callingSettingsSnapshot(settings models.JSONB) map[string]any {
 		"calling_enabled":       settings["calling_enabled"],
 		"max_call_duration":     settings["max_call_duration"],
 		"transfer_timeout_secs": settings["transfer_timeout_secs"],
-		"hold_music_file":       settings["hold_music_file"],
-		"ringback_file":         settings["ringback_file"],
+		"hold_music_file":            settings["hold_music_file"],
+		"hold_music_original_name":   settings["hold_music_original_name"],
+		"ringback_file":              settings["ringback_file"],
+		"ringback_original_name":     settings["ringback_original_name"],
 	}
 }
 
 // OrganizationSettings represents the settings structure
 type OrganizationSettings struct {
-	MaskPhoneNumbers    bool   `json:"mask_phone_numbers"`
-	Timezone            string `json:"timezone"`
-	DateFormat          string `json:"date_format"`
-	CallingEnabled      bool   `json:"calling_enabled"`
-	MaxCallDuration     int    `json:"max_call_duration"`
-	TransferTimeoutSecs int    `json:"transfer_timeout_secs"`
-	HoldMusicFile       string `json:"hold_music_file"`
-	RingbackFile        string `json:"ringback_file"`
-	MetaAppID           string `json:"meta_app_id"`
-	MetaConfigID        string `json:"meta_config_id"`
-	HasMetaAppSecret    bool   `json:"has_meta_app_secret"`
+	MaskPhoneNumbers       bool   `json:"mask_phone_numbers"`
+	Timezone               string `json:"timezone"`
+	DateFormat             string `json:"date_format"`
+	CallingEnabled         bool   `json:"calling_enabled"`
+	MaxCallDuration        int    `json:"max_call_duration"`
+	TransferTimeoutSecs    int    `json:"transfer_timeout_secs"`
+	HoldMusicFile          string `json:"hold_music_file"`
+	HoldMusicOriginalName  string `json:"hold_music_original_name"`
+	RingbackFile           string `json:"ringback_file"`
+	RingbackOriginalName   string `json:"ringback_original_name"`
+	MetaAppID              string `json:"meta_app_id"`
+	MetaConfigID           string `json:"meta_config_id"`
+	HasMetaAppSecret       bool   `json:"has_meta_app_secret"`
 }
 
 // GetOrganizationSettings returns the organization settings
@@ -108,8 +112,14 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		if v, ok := org.Settings["hold_music_file"].(string); ok && v != "" {
 			settings.HoldMusicFile = v
 		}
+		if v, ok := org.Settings["hold_music_original_name"].(string); ok && v != "" {
+			settings.HoldMusicOriginalName = v
+		}
 		if v, ok := org.Settings["ringback_file"].(string); ok && v != "" {
 			settings.RingbackFile = v
+		}
+		if v, ok := org.Settings["ringback_original_name"].(string); ok && v != "" {
+			settings.RingbackOriginalName = v
 		}
 		if v, ok := org.Settings["meta_app_id"].(string); ok && v != "" {
 			settings.MetaAppID = v
