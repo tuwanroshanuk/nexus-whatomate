@@ -1069,7 +1069,7 @@ onMounted(() => {
                       :to="SHORTCUT_REGISTRY[key as keyof typeof SHORTCUT_REGISTRY].to"
                       :class="[
                         'card-interactive flex min-h-36 flex-col items-start justify-end p-5 rounded-[24px] border-0',
-                        shortcutIndex % 4 === 0 ? 'bg-[#0738f9] text-white' :
+                        shortcutIndex % 4 === 0 ? 'bg-[#123dff] text-white' :
                         shortcutIndex % 4 === 1 ? 'bg-[#ffc9f5] text-gray-950' :
                         shortcutIndex % 4 === 2 ? 'bg-[#d6f5ff] text-gray-950' : 'bg-[#ffdf75] text-gray-950'
                       ]"

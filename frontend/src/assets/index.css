@@ -423,7 +423,7 @@
 
 .light .chat-bubble-outgoing .reply-preview {
   background: rgba(0, 0, 0, 0.08);
-  border-left-color: #9d174d;
+  border-left-color: #123dff;
 }
 
 .light .chat-bubble-outgoing .reply-preview p {
@@ -431,7 +431,7 @@
 }
 
 .light .chat-bubble-outgoing .reply-preview .font-medium {
-  color: #9d174d;
+  color: #123dff;
 }
 
 /* Button reply style - shows when user clicks a button */
@@ -461,7 +461,7 @@
 }
 
 .light .chat-bubble-outgoing .button-reply-bubble {
-  color: #9d174d;
+  color: #123dff;
 }
 
 /* Interactive buttons */
@@ -508,7 +508,7 @@
 }
 
 .light .chat-bubble-outgoing .interactive-buttons > div {
-  color: #9d174d; /* darker green for light mode outgoing */
+  color: #123dff;
 }
 
 /* Message highlight animation for scroll-to */

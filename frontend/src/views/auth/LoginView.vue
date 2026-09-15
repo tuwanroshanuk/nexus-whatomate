@@ -134,8 +134,8 @@ const initiateSSO = (provider: string) => {
             class="h-10 rounded-none border-x-0 border-t-0 border-[#d8d8d8] pl-6 pr-1 text-sm shadow-none focus-visible:ring-0 focus-visible:border-[#123dff]"
           />
         </div>
-        <div class="pt-6 grid grid-cols-[110px_1fr] items-center gap-4">
-          <Button type="submit" class="h-[35px] rounded-[5px] bg-[#123dff] text-white text-[13px] hover:bg-[#0029dc]" :disabled="isLoading">
+        <div class="pt-6 flex items-center justify-center gap-10">
+          <Button type="submit" class="h-[35px] w-[110px] rounded-[5px] bg-[#123dff] text-white text-[13px] hover:bg-[#0029dc]" :disabled="isLoading">
             <Loader2 v-if="isLoading" class="mr-2 h-3.5 w-3.5 animate-spin" />
             Sign In
           </Button>

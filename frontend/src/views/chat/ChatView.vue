@@ -2043,7 +2043,7 @@ async function sendMediaMessage() {
               :class="[
                 'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all',
                 acct.name === selectedAccount
-                  ? 'bg-emerald-600 bg-[#0738f9] text-white shadow-sm'
+                  ? 'bg-emerald-600 bg-[#123dff] text-white shadow-sm'
                   : 'bg-white/[0.08] text-white/70 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
               ]"
               @click="switchAccount(acct.name)"
@@ -2582,7 +2582,7 @@ async function sendMediaMessage() {
               @keydown.enter.exact.prevent="sendMessage"
               @input="autoResizeTextarea"
             />
-            <button type="submit" class="w-9 h-9 rounded-lg bg-[#0738f9] hover:bg-[#062ed1] flex items-center justify-center transition-colors disabled:opacity-50" :disabled="!messageInput.trim() || isSending">
+            <button type="submit" class="w-9 h-9 rounded-lg bg-[#123dff] hover:bg-[#0029dc] flex items-center justify-center transition-colors disabled:opacity-50" :disabled="!messageInput.trim() || isSending">
               <Send class="w-4 h-4 text-white" />
             </button>
           </form>

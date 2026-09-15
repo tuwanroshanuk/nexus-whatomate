@@ -1,41 +1,40 @@
 /* Nexus One brand overrides
-   Primary brand colour: #0738F9 */
+   Primary brand colour: #123DFF */
 
 :root,
 .light,
 .dark {
-  --primary: 229 95% 50%;
+  --primary: 229 100% 57%;
   --primary-foreground: 0 0% 100%;
-  --ring: 229 95% 50%;
+  --ring: 229 100% 57%;
 }
 
 body {
-  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(7, 56, 249, 0.09), transparent) !important;
+  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(18, 61, 255, 0.09), transparent) !important;
 }
 
 .light body {
-  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(7, 56, 249, 0.055), transparent) !important;
+  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(18, 61, 255, 0.055), transparent) !important;
 }
 
-/* Brand gradients and shadows */
+/* Keep legacy pink utility classes on the current brand colour. */
 .from-pink-500,
 .from-pink-500,
 .from-pink-600 {
-  --tw-gradient-from: #be185d var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: rgb(190 24 93 / 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-from: #123dff var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgb(18 61 255 / 0) var(--tw-gradient-to-position) !important;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
 }
 
 .to-pink-600,
 .to-pink-600,
 .to-pink-700 {
-  --tw-gradient-to: #9d174d var(--tw-gradient-to-position) !important;
+  --tw-gradient-to: #123dff var(--tw-gradient-to-position) !important;
 }
 
 .shadow-pink-500\/20,
 .shadow-pink-500\/20 {
-  --tw-shadow-color: rgb(190 24 93 / 0.2) !important;
-  --tw-shadow: var(--tw-shadow-colored) !important;
+  --tw-shadow: 0 0 #0000 !important;
 }
 
 /* Common Tailwind green/emerald accent utilities */
@@ -43,21 +42,21 @@ body {
 .bg-pink-500,
 .bg-pink-600,
 .bg-pink-600 {
-  background-color: #be185d !important;
+  background-color: #123dff !important;
 }
 
 .hover\:bg-pink-600:hover,
 .hover\:bg-pink-600:hover,
 .hover\:bg-pink-700:hover,
 .hover\:bg-pink-700:hover {
-  background-color: #9d174d !important;
+  background-color: #123dff !important;
 }
 
 .bg-pink-500\/10,
 .bg-pink-500\/10,
 .bg-pink-500\/20,
 .bg-pink-500\/20 {
-  background-color: rgb(190 24 93 / 0.12) !important;
+  background-color: rgb(18 61 255 / 0.12) !important;
 }
 
 .text-pink-400,
@@ -67,47 +66,41 @@ body {
 .text-pink-500,
 .text-pink-600,
 .text-pink-700 {
-  color: #be185d !important;
+  color: #123dff !important;
 }
 
 .border-pink-500,
 .border-pink-500,
 .border-pink-600,
 .border-pink-600 {
-  border-color: #be185d !important;
+  border-color: #123dff !important;
 }
 
 .border-pink-500\/20,
 .border-pink-500\/20,
 .border-pink-500\/30,
 .border-pink-500\/30 {
-  border-color: rgb(190 24 93 / 0.28) !important;
+  border-color: rgb(18 61 255 / 0.28) !important;
 }
 
 .ring-pink-500,
 .ring-pink-500,
 .focus\:ring-pink-500:focus,
 .focus\:ring-pink-500:focus {
-  --tw-ring-color: #be185d !important;
+  --tw-ring-color: #123dff !important;
 }
 
 /* Existing bespoke green effects */
 .card-depth::after {
-  background: linear-gradient(90deg, #be185d, #db2777, #9d174d) !important;
+  background: #123dff !important;
 }
 
 .card-interactive:hover {
-  box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    0 0 30px -5px rgba(190, 24, 93, 0.18) !important;
+  box-shadow: none !important;
 }
 
 .light .card-interactive:hover {
-  box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.1),
-    0 0 0 1px rgba(0, 0, 0, 0.05),
-    0 0 30px -5px rgba(190, 24, 93, 0.12) !important;
+  box-shadow: none !important;
 }
 
 /* Chat accents */
@@ -121,21 +114,21 @@ body {
 }
 
 .reply-preview {
-  border-left-color: #315cff !important;
+  border-left-color: #123dff !important;
 }
 
 .reply-preview .font-medium {
-  color: #6f8cff !important;
+  color: #123dff !important;
 }
 
 .light .reply-preview,
 .light .reply-preview .font-medium {
-  border-left-color: #0738f9 !important;
-  color: #0738f9 !important;
+  border-left-color: #123dff !important;
+  color: #123dff !important;
 }
 
 /* Keep semantic success/error states readable while removing brand-green UI. */
 [data-brand-accent="true"] {
-  color: #0738f9 !important;
-  border-color: #0738f9 !important;
+  color: #123dff !important;
+  border-color: #123dff !important;
 }
