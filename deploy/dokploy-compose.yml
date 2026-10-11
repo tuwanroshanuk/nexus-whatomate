@@ -3,21 +3,25 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+    image: ${COMPOSE_PROJECT_NAME:-nexus-support}-whatomate:local
+    command: ["server", "-config", "config.toml"]
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment:
+      whatomate-migrate:
+        condition: service_completed_successfully
+    environment: &whatomate-environment
       TZ: ${TZ:-UTC}
 
-      WHATOMATE_APP__NAME: ${WHATOMATE_APP__NAME:-Nexus Whatomate}
+      WHATOMATE_APP__NAME: ${WHATOMATE_APP__NAME:-Codait One}
       WHATOMATE_APP__ENVIRONMENT: production
       WHATOMATE_APP__DEBUG: "false"
       WHATOMATE_APP__ENCRYPTION_KEY: ${WHATOMATE_APP__ENCRYPTION_KEY:-}
 
-      WHATOMATE_SERVER__ALLOWED_ORIGINS: https://one.nexuscloud.uk
+      WHATOMATE_SERVER__ALLOWED_ORIGINS: ${WHATOMATE_SERVER__ALLOWED_ORIGINS:-https://one.codait.uk}
 
       WHATOMATE_DATABASE__HOST: postgres
       WHATOMATE_DATABASE__PORT: "5432"
@@ -47,7 +51,7 @@ services:
       WHATOMATE_FIREBASE_CREDENTIALS_JSON: ${WHATOMATE_FIREBASE_CREDENTIALS_JSON:-}
       WHATOMATE_FIREBASE_CREDENTIALS_FILE: ${WHATOMATE_FIREBASE_CREDENTIALS_FILE:-}
 
-      WHATOMATE_COOKIE__DOMAIN: one.nexuscloud.uk
+      WHATOMATE_COOKIE__DOMAIN: ${WHATOMATE_COOKIE__DOMAIN:-one.codait.uk}
       WHATOMATE_COOKIE__SECURE: "true"
 
       WHATOMATE_RATE_LIMIT__ENABLED: "true"
@@ -92,6 +96,23 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # Run schema changes once per deployment. A plain application restart no
+  # longer repeats every AutoMigrate, index statement, seed, and backfill.
+  whatomate-migrate:
+    image: ${COMPOSE_PROJECT_NAME:-nexus-support}-whatomate:local
+    command: ["migrate", "-config", "config.toml"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *whatomate-environment
+    volumes:
+      - ./config.production.toml:/app/config.toml:ro
+    networks:
+      - whatomate
+    healthcheck:
+      disable: true
 
   postgres:
     image: postgres:17-alpine

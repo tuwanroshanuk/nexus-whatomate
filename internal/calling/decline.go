@@ -160,6 +160,7 @@ func (m *Manager) runDeclinedTransferRotation(
 	if transfer.InitiatingAgentID != nil {
 		basePayload["initiating_agent_id"] = transfer.InitiatingAgentID.String()
 	}
+	m.enrichTransferPayload(transfer.OrganizationID, transfer.ContactID, basePayload)
 
 	for totalCtx.Err() == nil {
 		session.mu.Lock()

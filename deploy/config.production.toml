@@ -1,5 +1,5 @@
 [app]
-name = "Nexus WhatsApp"
+name = "Codait One"
 environment = "production"
 debug = false
 encryption_key = "overridden-by-dokploy"
@@ -10,7 +10,7 @@ port = 8080
 read_timeout = 60
 write_timeout = 60
 base_path = ""
-allowed_origins = "https://one.nexuscloud.uk"
+allowed_origins = "https://one.codait.uk"
 
 [database]
 host = "postgres"
@@ -53,7 +53,7 @@ app_secret = ""
 config_id = ""
 
 [cookie]
-domain = "one.nexuscloud.uk"
+domain = "one.codait.uk"
 secure = true
 
 [rate_limit]
@@ -88,4 +88,4 @@ opusenc_binary = "opusenc"
 [default_admin]
 email = "admin@nexuscloud.uk"
 password = "overridden-by-dokploy"
-full_name = "Nexus Administrator"
+full_name = "Codait Administrator"

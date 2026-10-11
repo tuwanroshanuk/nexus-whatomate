@@ -117,6 +117,19 @@ port = 8080
 	assert.Equal(t, 1234, cfg.Server.Port, "WHATOMATE_SERVER__PORT must override file")
 }
 
+func TestLoad_NormalizesPastedCookieURL(t *testing.T) {
+	t.Setenv("WHATOMATE_COOKIE__DOMAIN", "https://one.codait.uk/")
+	cfg, err := config.Load(writeConfig(t, ""))
+	require.NoError(t, err)
+	assert.Equal(t, "one.codait.uk", cfg.Cookie.Domain)
+}
+
+func TestLoad_RejectsCookieDomainWithPath(t *testing.T) {
+	t.Setenv("WHATOMATE_COOKIE__DOMAIN", "https://one.codait.uk/login")
+	_, err := config.Load(writeConfig(t, ""))
+	require.ErrorContains(t, err, "cookie.domain")
+}
+
 func TestLoad_EmptyConfigPathStillLoadsDefaults(t *testing.T) {
 	cfg, err := config.Load("")
 	require.NoError(t, err)

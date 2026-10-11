@@ -43,6 +43,11 @@ func generateTestToken(t *testing.T, userID, orgID uuid.UUID, email string, role
 	return tokenString
 }
 
+func TestParseAllowedOrigins_TrimPastedTrailingSlash(t *testing.T) {
+	origins := middleware.ParseAllowedOrigins("https://one.codait.uk/")
+	assert.True(t, middleware.IsOriginAllowed("https://one.codait.uk", origins))
+}
+
 func TestCORS(t *testing.T) {
 	t.Parallel()
 

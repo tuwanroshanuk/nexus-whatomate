@@ -52,7 +52,7 @@ func RequestLogger(log logf.Logger) fastglue.FastMiddleware {
 func ParseAllowedOrigins(allowedOrigins string) map[string]bool {
 	origins := make(map[string]bool)
 	for _, o := range strings.Split(allowedOrigins, ",") {
-		o = strings.TrimSpace(o)
+		o = strings.TrimSuffix(strings.TrimSpace(o), "/")
 		if o != "" {
 			origins[o] = true
 		}

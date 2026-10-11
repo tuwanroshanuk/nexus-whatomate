@@ -1,0 +1,13 @@
+.git
+.github
+frontend/node_modules
+frontend/dist
+frontend/playwright-report
+frontend/test-results
+internal/frontend/dist
+uploads
+audio
+tmp
+temp
+*.log
+*.test

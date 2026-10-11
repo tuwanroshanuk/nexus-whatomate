@@ -12,6 +12,7 @@ import (
 	"github.com/pion/webrtc/v4"
 	"github.com/shridarpatil/whatomate/internal/assignment"
 	"github.com/shridarpatil/whatomate/internal/models"
+	"github.com/shridarpatil/whatomate/internal/utils"
 	"github.com/shridarpatil/whatomate/internal/websocket"
 )
 
@@ -144,6 +145,7 @@ func (m *Manager) initiateTransfer(session *CallSession, waAccount string, teamT
 			"whatsapp_account": transfer.WhatsAppAccount,
 			"transferred_at":   transfer.TransferredAt.Format(time.RFC3339),
 		}
+		m.enrichTransferPayload(transfer.OrganizationID, transfer.ContactID, payload)
 		m.wsHub.BroadcastToUser(session.OrganizationID, *assignedAgentID, websocket.WSMessage{
 			Type:    websocket.TypeCallTransferWaiting,
 			Payload: payload,
@@ -223,6 +225,7 @@ func (m *Manager) initiateTransfer(session *CallSession, waAccount string, teamT
 			"whatsapp_account": transfer.WhatsAppAccount,
 			"transferred_at":   transfer.TransferredAt.Format(time.RFC3339),
 		}
+		m.enrichTransferPayload(transfer.OrganizationID, transfer.ContactID, payload)
 		m.broadcastEvent(transfer.OrganizationID, websocket.TypeCallTransferWaiting, payload)
 	}
 
@@ -406,6 +409,7 @@ func (m *Manager) InitiateAgentTransfer(callLogID, initiatingAgentID uuid.UUID, 
 			"initiating_agent_id": initiatingAgentID.String(),
 			"transferred_at":      transfer.TransferredAt.Format(time.RFC3339),
 		}
+		m.enrichTransferPayload(session.OrganizationID, transfer.ContactID, payload)
 		m.wsHub.BroadcastToUser(session.OrganizationID, *targetAgentID, websocket.WSMessage{
 			Type:    websocket.TypeCallTransferWaiting,
 			Payload: payload,
@@ -438,6 +442,7 @@ func (m *Manager) InitiateAgentTransfer(callLogID, initiatingAgentID uuid.UUID, 
 			"initiating_agent_id": initiatingAgentID.String(),
 			"transferred_at":      transfer.TransferredAt.Format(time.RFC3339),
 		}
+		m.enrichTransferPayload(session.OrganizationID, transfer.ContactID, payload)
 		m.broadcastEvent(session.OrganizationID, websocket.TypeCallTransferWaiting, payload)
 	}
 
@@ -869,6 +874,7 @@ func (m *Manager) runTransferRotation(session *CallSession, transfer models.Call
 	if transfer.InitiatingAgentID != nil {
 		basePayload["initiating_agent_id"] = transfer.InitiatingAgentID.String()
 	}
+	m.enrichTransferPayload(transfer.OrganizationID, transfer.ContactID, basePayload)
 
 	for totalCtx.Err() == nil {
 		session.mu.Lock()
@@ -1443,4 +1449,52 @@ func (m *Manager) ResumeCall(callLogID uuid.UUID) error {
 	go bridge.Start(callerRemote, agentLocal, agentRemote, callerLocal)
 
 	return nil
+}
+
+// enrichTransferPayload enriches a transfer payload with customer name, avatar, and metadata.
+func (m *Manager) enrichTransferPayload(orgID uuid.UUID, contactID uuid.UUID, payload map[string]any) {
+	if contactID == uuid.Nil {
+		return
+	}
+	var contact models.Contact
+	if err := m.db.Select("id", "phone_number", "profile_name", "metadata", "tags", "assigned_user_id").
+		Where("id = ? AND organization_id = ?", contactID, orgID).
+		First(&contact).Error; err != nil {
+		return
+	}
+
+	contactName := contact.ProfileName
+	settings := m.getOrgCallingSettingsCached(orgID)
+	if settings.MaskPhoneNumbers {
+		contactName = utils.MaskIfPhoneNumber(contactName)
+	}
+	if contactName != "" {
+		payload["contact_name"] = contactName
+		payload["caller_name"] = contactName
+	}
+
+	avatarURL := ""
+	if contact.Metadata != nil {
+		if u, ok := contact.Metadata["avatar_url"].(string); ok && u != "" {
+			avatarURL = u
+		} else if u, ok := contact.Metadata["profile_picture_url"].(string); ok && u != "" {
+			avatarURL = u
+		}
+	}
+	if avatarURL != "" {
+		payload["profile_picture_url"] = avatarURL
+		payload["avatar_url"] = avatarURL
+	}
+
+	if contact.Tags != nil {
+		payload["tags"] = contact.Tags
+	}
+
+	payload["customer_details"] = map[string]any{
+		"name":                contactName,
+		"phone":               m.maybeMaskPhone(orgID, contact.PhoneNumber),
+		"tags":                contact.Tags,
+		"avatar_url":          avatarURL,
+		"profile_picture_url": avatarURL,
+	}
 }

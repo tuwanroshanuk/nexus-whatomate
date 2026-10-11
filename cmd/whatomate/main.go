@@ -27,6 +27,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"github.com/zerodha/logf"
+	"gorm.io/gorm"
 )
 
 var (
@@ -43,6 +44,8 @@ func main() {
 	switch os.Args[1] {
 	case "server":
 		runServer(os.Args[2:])
+	case "migrate":
+		runMigrate(os.Args[2:])
 	case "worker":
 		runWorker(os.Args[2:])
 	case "version":
@@ -64,6 +67,7 @@ Usage:
 
 Commands:
   server    Start the API server (with optional embedded workers)
+  migrate   Run database migrations and exit
   worker    Start background workers only (no API server)
   version   Show version information
   help      Show this help message
@@ -82,6 +86,7 @@ Examples:
   whatomate server -workers 0          # API only (no workers)
   whatomate server -workers 4          # API + 4 embedded workers
   whatomate server -migrate            # Run migrations and start server
+  whatomate migrate                    # Run migrations without starting server
   whatomate worker -workers 4          # 4 workers only (no API)
 
 Deployment Scenarios:
@@ -93,6 +98,38 @@ Deployment Scenarios:
 // ============================================================================
 // SERVER COMMAND
 // ============================================================================
+
+func runMigrations(db *gorm.DB, cfg *config.Config, lo logf.Logger) error {
+	if err := database.RunMigrationWithProgress(db, &cfg.DefaultAdmin); err != nil {
+		return err
+	}
+	// Backfill v2 graph for any legacy chatbot flow still on Steps[].
+	return handlers.BackfillChatbotFlowGraph(db, lo)
+}
+
+func runMigrate(args []string) {
+	migrateFlags := flag.NewFlagSet("migrate", flag.ExitOnError)
+	configPath := migrateFlags.String("config", "config.toml", "Path to config file")
+	_ = migrateFlags.Parse(args)
+
+	lo := logf.New(logf.Opts{
+		Level:           logf.InfoLevel,
+		TimestampFormat: "2006-01-02 15:04:05",
+		DefaultFields:   []any{"app", "whatomate"},
+	})
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		lo.Fatal("Failed to load config", "error", err)
+	}
+	db, err := database.NewPostgres(&cfg.Database, cfg.App.Debug)
+	if err != nil {
+		lo.Fatal("Failed to connect to database", "error", err)
+	}
+	if err := runMigrations(db, cfg, lo); err != nil {
+		lo.Fatal("Migration failed", "error", err)
+	}
+	lo.Info("Migrations completed")
+}
 
 func runServer(args []string) {
 	serverFlags := flag.NewFlagSet("server", flag.ExitOnError)
@@ -154,13 +191,8 @@ func runServer(args []string) {
 
 	// Run migrations if requested
 	if *migrate {
-		if err := database.RunMigrationWithProgress(db, &cfg.DefaultAdmin); err != nil {
+		if err := runMigrations(db, cfg, lo); err != nil {
 			lo.Fatal("Migration failed", "error", err)
-		}
-		// Backfill v2 graph for any legacy chatbot flow still on Steps[].
-		// Idempotent — re-running is a no-op once every row is converted.
-		if err := handlers.BackfillChatbotFlowGraph(db, lo); err != nil {
-			lo.Fatal("Chatbot flow graph backfill failed", "error", err)
 		}
 	}
 

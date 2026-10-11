@@ -4,6 +4,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha1" //nolint:gosec // SHA-1 is mandated by the coturn TURN REST API (RFC draft)
 	"encoding/base64"
+	"fmt"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -183,7 +185,33 @@ func Load(configPath string) (*Config, error) {
 		return nil, err
 	}
 	setDefaults(&cfg)
+	domain, err := normalizeCookieDomain(cfg.Cookie.Domain)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Cookie.Domain = domain
 	return &cfg, nil
+}
+
+// Cookie Domain is a hostname. Accept a pasted URL, but never pass its scheme,
+// path, or port through to Set-Cookie (browsers silently reject that cookie).
+func normalizeCookieDomain(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil // Host-only cookie.
+	}
+	if strings.Contains(value, "://") {
+		u, err := url.Parse(value)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" || u.Port() != "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+			return "", fmt.Errorf("cookie.domain must be a hostname or an origin URL without a path")
+		}
+		value = u.Hostname()
+	}
+	value = strings.TrimSuffix(value, "/")
+	if strings.ContainsAny(value, "/: ") || strings.HasPrefix(value, ".") {
+		return "", fmt.Errorf("cookie.domain must be a hostname without a scheme or path")
+	}
+	return value, nil
 }
 
 func setDefaults(cfg *Config) {

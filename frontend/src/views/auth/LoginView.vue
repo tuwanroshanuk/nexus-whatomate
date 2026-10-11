@@ -95,11 +95,11 @@ const initiateSSO = (provider: string) => {
   <div class="min-h-svh flex flex-col items-center justify-center bg-white px-6 py-12 gap-10">
     <div class="w-full max-w-[500px] rounded-[17px] border border-[#d1d1d1] bg-white px-8 py-10 sm:px-14">
       <div class="flex justify-center mb-8">
-        <img src="/nexus.svg" alt="Nexus One" class="h-[34px] w-[34px]" />
+        <img src="/nexus.svg" alt="Codait One" class="h-[34px] w-[34px]" />
       </div>
       <div class="text-center space-y-2.5">
-        <h1 class="text-2xl font-normal tracking-tight text-[#111111]">Sign In To Nexus One</h1>
-        <p class="text-sm text-[#111111]">Innovate, Design, and Craft with Nexus</p>
+        <h1 class="text-2xl font-normal tracking-tight text-[#111111]">Sign In To Codait One</h1>
+        <p class="text-sm text-[#111111]">Innovate, Design, and Craft with Codait</p>
         <p class="text-sm leading-5 text-[#111111]">Pioneering creative solutions through cutting-edge<br class="hidden sm:inline" /> technology and innovative design thinking.</p>
       </div>
 
@@ -179,10 +179,10 @@ const initiateSSO = (provider: string) => {
       </div>
 
       <p class="mt-8 text-sm text-center text-gray-500">
-        New to Nexus?
+        New to Codait?
         <RouterLink to="/register" class="text-[#123dff] hover:underline">Create an account</RouterLink>
       </p>
     </div>
-    <p class="text-xs text-gray-500">Read Nexus Account Terms And Conditions</p>
+    <p class="text-xs text-gray-500">Read Codait Account Terms And Conditions</p>
   </div>
 </template>
